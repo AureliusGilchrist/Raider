@@ -1,0 +1,260 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { useParams } from '@tanstack/react-router';
+import { GlassPanel } from '../../components/GlassPanel';
+import { Avatar } from '../../components/Avatar';
+import { servers as serversApi, messages as messagesApi, shares as sharesApi } from '../../lib/api';
+import { useAuthStore } from '../../stores/authStore';
+import { useWSStore } from '../../stores/wsStore';
+import type { Channel, Message } from '../../lib/types';
+import { Hash, Volume2, Plus, Send, Users, Share2, X } from 'lucide-react';
+import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
+
+export function ServerPage() {
+  const { serverId } = useParams({ strict: false }) as { serverId: string };
+  const { user } = useAuthStore();
+  const { send, on } = useWSStore();
+
+  const [server, setServer] = useState<any>(null);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
+  const [msgs, setMsgs] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const [shareComment, setShareComment] = useState('');
+  const emitTyping = useTypingEmitter({ channelId: activeChannel || undefined });
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const prevChannelRef = useRef<string | null>(null);
+
+  const handleShareMessage = async () => {
+    if (!shareMsg) return;
+    try {
+      await sharesApi.create({ share_type: 'message', message_id: shareMsg, comment: shareComment });
+      setShareMsg(null);
+      setShareComment('');
+    } catch {}
+  };
+
+  useEffect(() => {
+    Promise.all([
+      serversApi.get(serverId).catch(() => null),
+      serversApi.channels(serverId).catch(() => []),
+      serversApi.members(serverId).catch(() => []),
+    ]).then(([s, ch, m]) => {
+      setServer(s);
+      setChannels(ch || []);
+      setMembers(m || []);
+      if (ch && ch.length > 0) setActiveChannel(ch[0].id);
+    });
+  }, [serverId]);
+
+  useEffect(() => {
+    if (!activeChannel) return;
+    // Leave previous channel
+    if (prevChannelRef.current && prevChannelRef.current !== activeChannel) {
+      send({ type: 'leave_channel', payload: { channel_id: prevChannelRef.current } });
+    }
+    prevChannelRef.current = activeChannel;
+
+    messagesApi.channel(activeChannel).then(setMsgs).catch(() => {});
+    send({ type: 'join_channel', payload: { channel_id: activeChannel } });
+
+    const unsub = on('new_message', (msg) => {
+      if (msg.payload?.channel_id === activeChannel) {
+        setMsgs((prev) => {
+          // Deduplicate by ID
+          if (prev.some((m) => m.id === msg.payload.id)) return prev;
+          return [...prev, msg.payload];
+        });
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [activeChannel]);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
+
+  // Helper: should this message show a full header or be grouped?
+  const shouldGroup = (msgs: Message[], index: number) => {
+    if (index === 0) return false;
+    const prev = msgs[index - 1];
+    const curr = msgs[index];
+    if (prev.sender_id !== curr.sender_id) return false;
+    const gap = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime();
+    return gap < 5 * 60 * 1000; // 5 minutes
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || !activeChannel) return;
+    try {
+      await messagesApi.send({ content: input, channel_id: activeChannel, server_id: serverId, encrypted: false });
+      setInput('');
+    } catch {}
+  };
+
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    try {
+      const ch = await serversApi.createChannel(serverId, { name: newChannelName, type: 'text' });
+      setChannels((prev) => [...prev, ch]);
+      setNewChannelName('');
+      setShowCreateChannel(false);
+    } catch {}
+  };
+
+  return (
+    <div className="flex h-full relative">
+      {/* Share dialog */}
+      {shareMsg && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <GlassPanel className="p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Share2 size={18} /> Share Message to Home
+              </h3>
+              <button onClick={() => { setShareMsg(null); setShareComment(''); }} className="text-gray-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <textarea
+              placeholder="Add a comment (optional)..."
+              value={shareComment}
+              onChange={(e) => setShareComment(e.target.value)}
+              rows={2}
+              className="w-full mb-3"
+            />
+            <button onClick={handleShareMessage} className="btn btn-primary w-full">
+              <Share2 size={14} /> Share
+            </button>
+          </GlassPanel>
+        </div>
+      )}
+
+      {/* Channel sidebar */}
+      <div className="w-56 glass-light border-r border-white/10 flex flex-col shrink-0">
+        <div className="p-3 border-b border-white/10">
+          <h2 className="text-sm font-bold text-white truncate">{server?.name || 'Loading...'}</h2>
+          <p className="text-xs text-gray-500 truncate">{server?.description}</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex items-center justify-between px-2 mb-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase">Channels</span>
+            <button onClick={() => setShowCreateChannel(!showCreateChannel)} className="text-gray-500 hover:text-white">
+              <Plus size={14} />
+            </button>
+          </div>
+
+          {showCreateChannel && (
+            <form onSubmit={handleCreateChannel} className="px-2 mb-2">
+              <input
+                type="text"
+                placeholder="channel-name"
+                value={newChannelName}
+                onChange={(e) => setNewChannelName(e.target.value)}
+                className="w-full text-xs py-1 px-2"
+                autoFocus
+              />
+            </form>
+          )}
+
+          {channels.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => setActiveChannel(ch.id)}
+              className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-all-custom ${
+                activeChannel === ch.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              {ch.type === 'voice' ? <Volume2 size={14} /> : <Hash size={14} />}
+              <span className="truncate">{ch.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Members count */}
+        <div className="p-3 border-t border-white/10 text-xs text-gray-500 flex items-center gap-1">
+          <Users size={12} /> {members.length} members
+        </div>
+      </div>
+
+      {/* Chat area */}
+      <div className="flex-1 flex flex-col">
+        {activeChannel ? (
+          <>
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+              <Hash size={16} className="text-gray-400" />
+              <span className="text-white font-medium text-sm">
+                {channels.find((c) => c.id === activeChannel)?.name || ''}
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+              {msgs.map((msg, i) => {
+                const grouped = shouldGroup(msgs, i);
+                return (
+                  <div key={msg.id} className={`flex items-start gap-3 group hover:bg-white/5 rounded px-2 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`}>
+                    {grouped ? (
+                      <div className="w-8 shrink-0 flex items-center justify-center">
+                        <span className="text-[10px] text-gray-600 opacity-0 group-hover:opacity-100 transition-all-custom">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ) : (
+                      <Avatar url={msg.sender_avatar || ''} type="image" size={32} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {!grouped && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm font-semibold text-indigo-300">{msg.sender_name || 'Unknown'}</span>
+                          <span className="text-xs text-gray-600">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-200">{msg.content}</p>
+                    </div>
+                    <button
+                      onClick={() => setShareMsg(msg.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-green-400 transition-all-custom shrink-0"
+                      title="Share to home"
+                    >
+                      <Share2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="p-3 border-t border-white/10">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={`Message #${channels.find((c) => c.id === activeChannel)?.name || 'channel'}...`}
+                  value={input}
+                  onChange={(e) => { setInput(e.target.value); emitTyping(); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  className="flex-1"
+                />
+                <button onClick={handleSend} className="btn btn-primary px-3">
+                  <Send size={16} />
+                </button>
+              </div>
+              <TypingIndicator channelId={activeChannel || undefined} />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            Select a channel to start chatting
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
