@@ -35,13 +35,19 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Public routes
-	r.Post("/api/auth/register", handlers.Register)
-	r.Post("/api/auth/login", handlers.Login)
-	r.Post("/api/auth/2fa/verify-login", handlers.Verify2FALogin)
+	// Public routes (rate limited)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthRateLimit())
+		r.Post("/api/auth/register", handlers.Register)
+		r.Post("/api/auth/login", handlers.Login)
+		r.Post("/api/auth/2fa/verify-login", handlers.Verify2FALogin)
+	})
 
-	// WebSocket (auth via query param)
-	r.Get("/ws", handlers.HandleWebSocket)
+	// WebSocket (auth via query param, rate limited)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.WebSocketRateLimit())
+		r.Get("/ws", handlers.HandleWebSocket)
+	})
 
 	// File serving
 	r.Get("/api/uploads/{userID}/{filename}", handlers.ServeUpload)
@@ -170,8 +176,11 @@ func main() {
 		r.Post("/api/calls/{callID}/end", handlers.EndCall)
 		r.Post("/api/calls/signal", handlers.SignalWebRTC)
 
-		// Uploads
-		r.Post("/api/upload", handlers.UploadFile)
+		// Uploads (rate limited)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.UploadRateLimit())
+			r.Post("/api/upload", handlers.UploadFile)
+		})
 		r.Post("/api/avatar", handlers.SetAvatar)
 		r.Post("/api/banner", handlers.SetBanner)
 

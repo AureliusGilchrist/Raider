@@ -14,8 +14,21 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var allowedOrigins = map[string]bool{
+	"http://localhost:3000":   true,
+	"http://localhost:5173":   true,
+	"http://127.0.0.1:3000":  true,
+	"http://127.0.0.1:5173":  true,
+}
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // Allow non-browser clients
+		}
+		return allowedOrigins[origin]
+	},
 }
 
 type WSHub struct {

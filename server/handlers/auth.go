@@ -26,6 +26,14 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Username, email and password are required", http.StatusBadRequest)
 		return
 	}
+	if len(req.Username) > 32 {
+		jsonError(w, "Username must be under 32 characters", http.StatusBadRequest)
+		return
+	}
+	if len(req.Password) < 8 {
+		jsonError(w, "Password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
 
 	if req.KeyIterations < 128 || req.KeyIterations > 8192 {
 		req.KeyIterations = 128
@@ -184,6 +192,28 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Input validation
+	if req.DisplayName != nil && len(*req.DisplayName) > 100 {
+		jsonError(w, "Display name must be under 100 characters", http.StatusBadRequest)
+		return
+	}
+	if req.Bio != nil && len(*req.Bio) > 2000 {
+		jsonError(w, "Bio must be under 2000 characters", http.StatusBadRequest)
+		return
+	}
+	if req.Gender != nil && len(*req.Gender) > 50 {
+		jsonError(w, "Gender must be under 50 characters", http.StatusBadRequest)
+		return
+	}
+	if req.GenderCustom != nil && len(*req.GenderCustom) > 50 {
+		jsonError(w, "Custom gender must be under 50 characters", http.StatusBadRequest)
+		return
+	}
+	if req.StatusMessage != nil && len(*req.StatusMessage) > 200 {
+		jsonError(w, "Status message must be under 200 characters", http.StatusBadRequest)
 		return
 	}
 
