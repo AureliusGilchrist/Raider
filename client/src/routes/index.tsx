@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../components/GlassPanel';
 import { useAuthStore } from '../stores/authStore';
 import { Shield, LogIn, UserPlus, Key } from 'lucide-react';
+import { twofa as twofaApi } from '../lib/api';
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -12,6 +13,9 @@ export function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [keyIterations, setKeyIterations] = useState(128);
+  const [needs2FA, setNeeds2FA] = useState(false);
+  const [twoFAUserId, setTwoFAUserId] = useState('');
+  const [twoFACode, setTwoFACode] = useState('');
 
   // Redirect if already logged in
   React.useEffect(() => {
@@ -20,8 +24,22 @@ export function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needs2FA) {
+      try {
+        const res = await twofaApi.verifyLogin(twoFAUserId, twoFACode);
+        localStorage.setItem('raider_token', res.token);
+        window.location.reload();
+      } catch (err: any) {
+        useAuthStore.setState({ error: err.message || 'Invalid 2FA code' });
+      }
+      return;
+    }
     if (mode === 'login') {
-      await login(email, password);
+      const res = await login(email, password);
+      if (res?.requires_2fa) {
+        setNeeds2FA(true);
+        setTwoFAUserId(res.user_id);
+      }
     } else {
       await register(username, email, password, keyIterations);
     }
@@ -114,6 +132,22 @@ export function AuthPage() {
                 <span>128 (faster)</span>
                 <span>8192 (more secure)</span>
               </div>
+            </div>
+          )}
+
+          {needs2FA && (
+            <div className="animate-slide-up">
+              <label className="text-sm text-gray-200 mb-1 block">Enter 2FA Code</label>
+              <input
+                type="text"
+                placeholder="6-digit code"
+                value={twoFACode}
+                onChange={(e) => setTwoFACode(e.target.value)}
+                maxLength={6}
+                required
+                className="text-center text-lg tracking-widest"
+              />
+              <p className="text-xs text-gray-400 mt-1">Enter the code from your authenticator app</p>
             </div>
           )}
 

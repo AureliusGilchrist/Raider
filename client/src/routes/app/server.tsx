@@ -17,6 +17,7 @@ import { RoleManager } from '../../components/RoleManager';
 import { ServerAnnouncementBanner } from '../../components/ServerAnnouncementBanner';
 import { ServerAnnouncementEditor } from '../../components/ServerAnnouncementEditor';
 import { ServerSettingsPanel } from '../../components/ServerSettingsPanel';
+import { MemberProfileCard } from '../../components/MemberProfileCard';
 
 export function ServerPage() {
   const { serverId } = useParams({ strict: false }) as { serverId: string };
@@ -38,6 +39,7 @@ export function ServerPage() {
   const [showRoleManager, setShowRoleManager] = useState(false);
   const [showServerSettings, setShowServerSettings] = useState(false);
   const [showAnnouncementEditor, setShowAnnouncementEditor] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const emitTyping = useTypingEmitter({ channelId: activeChannel || undefined });
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevChannelRef = useRef<string | null>(null);
@@ -364,7 +366,7 @@ export function ServerPage() {
                   {role} — {roleMembers.length}
                 </h3>
                 {roleMembers.map((member) => (
-                  <div key={member.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-all-custom">
+                  <div key={member.id} onClick={() => setSelectedMember(member.id)} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-all-custom cursor-pointer">
                     <div className="relative">
                       <Avatar url={member.avatar_url || ''} type={member.avatar_type || 'image'} size={28} />
                       <div className="absolute -bottom-0.5 -right-0.5">
@@ -409,6 +411,15 @@ export function ServerPage() {
         <ServerAnnouncementEditor
           serverId={serverId}
           onClose={() => setShowAnnouncementEditor(false)}
+        />
+      )}
+
+      {/* Member Profile Card */}
+      {selectedMember && (
+        <MemberProfileCard
+          memberId={selectedMember}
+          serverId={serverId}
+          onClose={() => setSelectedMember(null)}
         />
       )}
     </div>

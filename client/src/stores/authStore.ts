@@ -7,7 +7,7 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<any>;
   register: (username: string, email: string, password: string, keyIterations: number) => Promise<void>;
   logout: () => void;
   fetchMe: () => Promise<void>;
@@ -25,10 +25,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     try {
       const res = await authApi.login({ email, password });
+      if (res.requires_2fa) {
+        set({ loading: false, error: null });
+        return res;
+      }
       localStorage.setItem('raider_token', res.token);
       set({ user: res.user, token: res.token, loading: false });
+      return res;
     } catch (err: any) {
       set({ error: err.message, loading: false });
+      return null;
     }
   },
 
