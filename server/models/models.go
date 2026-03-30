@@ -62,6 +62,7 @@ type UserSettings struct {
 	AccentColor         string `json:"accent_color"`
 	ShowBanner          bool   `json:"show_banner"`
 	ShowInSearch        bool   `json:"show_in_search"`
+	Ringtone            string `json:"ringtone"`
 }
 
 type UserStats struct {
@@ -197,13 +198,14 @@ type Comment struct {
 }
 
 type CallSession struct {
-	ID        string     `json:"id"`
-	CreatorID string     `json:"creator_id"`
-	ServerID  *string    `json:"server_id,omitempty"`
-	ChannelID *string    `json:"channel_id,omitempty"`
-	Active    bool       `json:"active"`
-	CreatedAt time.Time  `json:"created_at"`
-	EndedAt   *time.Time `json:"ended_at,omitempty"`
+	ID          string     `json:"id"`
+	CreatorID   string     `json:"creator_id"`
+	ServerID    *string    `json:"server_id,omitempty"`
+	ChannelID   *string    `json:"channel_id,omitempty"`
+	RingTargets []string   `json:"ring_targets,omitempty"`
+	Active      bool       `json:"active"`
+	CreatedAt   time.Time  `json:"created_at"`
+	EndedAt     *time.Time `json:"ended_at,omitempty"`
 }
 
 type CallParticipant struct {

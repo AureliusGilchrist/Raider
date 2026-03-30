@@ -1,0 +1,18 @@
+# Build output
+client/dist/
+
+# Dependencies
+client/node_modules/
+server/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Server binary
+server/raider
+server/raider.exe
