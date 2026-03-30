@@ -53,6 +53,11 @@ const COLOR_SCHEMES = [
   { id: 'bronze', name: 'Bronze', colors: ['#b87333', '#a0522d', '#8b4513'] },
   { id: 'neon', name: 'Neon', colors: ['#39ff14', '#00ff87', '#00e5ff'] },
   { id: 'space', name: '🚀 Space', colors: ['#0b0d21', '#1a0a2e', '#0d1b3e'] },
+  { id: 'ocean', name: '🌊 Ocean', colors: ['#0a192f', '#006994', '#004d7a'] },
+  { id: 'aurora', name: '🌌 Aurora', colors: ['#0a0a1a', '#00ff80', '#00c8ff'] },
+  { id: 'lava', name: '🌋 Lava', colors: ['#1a0a0a', '#ff4500', '#dc143c'] },
+  { id: 'matrix', name: '💻 Matrix', colors: ['#0a0a0a', '#005000', '#00ff00'] },
+  { id: 'sakura', name: '🌸 Sakura', colors: ['#1a0f1f', '#ffb6c1', '#ff69b4'] },
 ] as const;
 
 function AudioSettings() {

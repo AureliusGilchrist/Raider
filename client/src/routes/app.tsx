@@ -1,5 +1,6 @@
 import React from 'react';
-import { Outlet, Link, useNavigate } from '@tanstack/react-router';
+import { Outlet, Link, useNavigate, useLocation } from '@tanstack/react-router';
+import { PageTransition } from '../components/PageTransition';
 import { useAuthStore } from '../stores/authStore';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Avatar } from '../components/Avatar';
@@ -12,6 +13,7 @@ export function AppLayout() {
   const { user, logout, setUser } = useAuthStore();
   const { send, on } = useWSStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showStatusMenu, setShowStatusMenu] = React.useState(false);
   const previousStatusRef = React.useRef<string>(user?.status || 'online');
@@ -144,7 +146,9 @@ export function AppLayout() {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <PageTransition transitionKey={location.pathname}>
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>
