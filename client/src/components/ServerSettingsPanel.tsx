@@ -724,36 +724,28 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                           <p className="text-sm text-white">Anti-Spam</p>
                           <p className="text-xs text-gray-500">Detect and remove spam messages</p>
                         </div>
-                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
-                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
-                        </button>
+                        <span className="text-xs text-gray-600 italic">Coming Soon</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
                         <div>
                           <p className="text-sm text-white">Anti-Raid</p>
                           <p className="text-xs text-gray-500">Detect rapid mass joins</p>
                         </div>
-                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
-                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
-                        </button>
+                        <span className="text-xs text-gray-600 italic">Coming Soon</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
                         <div>
                           <p className="text-sm text-white">Block Links</p>
                           <p className="text-xs text-gray-500">Prevent posting of external links</p>
                         </div>
-                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
-                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
-                        </button>
+                        <span className="text-xs text-gray-600 italic">Coming Soon</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
                         <div>
                           <p className="text-sm text-white">Mention Spam Protection</p>
                           <p className="text-xs text-gray-500">Limit excessive @mentions</p>
                         </div>
-                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
-                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
-                        </button>
+                        <span className="text-xs text-gray-600 italic">Coming Soon</span>
                       </div>
                     </div>
                     <div className="p-3 bg-white/5 rounded-lg mt-4">
