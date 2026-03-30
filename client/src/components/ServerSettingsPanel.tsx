@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Shield, Bell, Users, Eye, Hash, Volume2, MessageSquare, Sparkles, Save, Loader2 } from 'lucide-react';
+import { X, Settings, Shield, Bell, Users, Eye, Hash, Volume2, MessageSquare, Sparkles, Save, Loader2, Gavel, List, Link2, Zap, SmilePlus } from 'lucide-react';
 import { servers as serversApi } from '../lib/api';
 import type { Channel, ServerSettings } from '../lib/types';
 
@@ -8,7 +8,7 @@ interface ServerSettingsPanelProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'overview' | 'moderation' | 'notifications' | 'community' | 'widget';
+type SettingsTab = 'overview' | 'moderation' | 'notifications' | 'community' | 'widget' | 'roles' | 'emoji' | 'audit_log' | 'bans' | 'invites' | 'safety';
 
 const VERIFICATION_LEVELS = [
   { value: 0, label: 'None', description: 'Unrestricted' },
@@ -46,6 +46,9 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [bans, setBans] = useState<any[]>([]);
+  const [invites, setInvites] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -59,6 +62,10 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
       ]);
       setSettings(settingsData);
       setChannels(channelsData || []);
+      // Load additional data (non-blocking)
+      serversApi.auditLogs(serverId).then(setAuditLogs).catch(() => {});
+      serversApi.bans(serverId).then(setBans).catch(() => {});
+      serversApi.invites(serverId).then(setInvites).catch(() => {});
     } catch {
       setError('Failed to load server settings');
     } finally {
@@ -98,6 +105,12 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
     { id: 'notifications', label: 'Notifications', icon: <Bell size={16} /> },
     { id: 'community', label: 'Community', icon: <Users size={16} /> },
     { id: 'widget', label: 'Widget', icon: <Eye size={16} /> },
+    { id: 'roles', label: 'Roles', icon: <Shield size={16} /> },
+    { id: 'emoji', label: 'Emoji', icon: <SmilePlus size={16} /> },
+    { id: 'audit_log', label: 'Audit Log', icon: <List size={16} /> },
+    { id: 'bans', label: 'Bans', icon: <Gavel size={16} /> },
+    { id: 'invites', label: 'Invites', icon: <Link2 size={16} /> },
+    { id: 'safety', label: 'Safety', icon: <Zap size={16} /> },
   ];
 
   return (
@@ -500,6 +513,253 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                           </select>
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'roles' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                        <Shield size={16} /> Roles
+                      </h3>
+                      <p className="text-sm text-gray-400 mb-4">
+                        Use the Role Manager button in the channel sidebar to manage roles.
+                      </p>
+                      <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
+                        <p className="text-xs text-gray-500">
+                          💡 The Role Manager provides full role creation, editing, permission assignment, and member role management. Look for the shield icon in the server sidebar.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'emoji' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                        <SmilePlus size={16} /> Server Emoji
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Upload custom emojis for your server members to use.
+                      </p>
+                      <div className="border-2 border-dashed border-white/20 rounded-lg p-8 text-center">
+                        <SmilePlus size={32} className="mx-auto text-gray-500 mb-2" />
+                        <p className="text-sm text-gray-400 mb-2">Custom emoji uploads coming soon</p>
+                        <p className="text-xs text-gray-600">Drag and drop images here or click to upload</p>
+                        <button className="btn btn-glass text-sm mt-4" disabled>
+                          Upload Emoji
+                        </button>
+                      </div>
+                      <div className="mt-4 p-3 bg-white/5 rounded-lg">
+                        <p className="text-xs text-gray-500">
+                          📝 Custom emojis must be under 256KB and in PNG, JPG, or GIF format. Animated emojis are supported.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'audit_log' && (
+                  <div className="space-y-4">
+                    <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                      <List size={16} /> Audit Log
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      View recent actions taken by members and moderators.
+                    </p>
+                    <div className="max-h-[50vh] overflow-y-auto space-y-2">
+                      {auditLogs.length === 0 ? (
+                        <div className="text-center py-8">
+                          <List size={24} className="mx-auto text-gray-600 mb-2" />
+                          <p className="text-sm text-gray-500">No audit log entries found</p>
+                        </div>
+                      ) : (
+                        auditLogs.map((entry, i) => (
+                          <div key={entry.id || i} className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0">
+                              <List size={14} className="text-indigo-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white">
+                                <span className="font-medium">{entry.user?.username || entry.user_id || 'Unknown'}</span>
+                                {' '}
+                                <span className="text-gray-400">{entry.action_type || entry.action || 'performed an action'}</span>
+                                {entry.target && (
+                                  <span className="text-gray-500"> on {entry.target}</span>
+                                )}
+                              </p>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                {entry.created_at ? new Date(entry.created_at).toLocaleString() : ''}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'bans' && (
+                  <div className="space-y-4">
+                    <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                      <Gavel size={16} /> Banned Members
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      View and manage banned members.
+                    </p>
+                    {bans.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Gavel size={24} className="mx-auto text-gray-600 mb-2" />
+                        <p className="text-sm text-gray-500">No bans</p>
+                        <p className="text-xs text-gray-600 mt-1">This server has no banned members.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {bans.map((ban, i) => (
+                          <div key={ban.id || i} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                              <Gavel size={14} className="text-red-400" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-white font-medium">{ban.user?.username || ban.username || ban.user_id || 'Unknown User'}</p>
+                              {ban.reason && <p className="text-xs text-gray-500">Reason: {ban.reason}</p>}
+                            </div>
+                            <p className="text-xs text-gray-600">
+                              {ban.created_at ? new Date(ban.created_at).toLocaleDateString() : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'invites' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-white font-semibold flex items-center gap-2">
+                        <Link2 size={16} /> Server Invites
+                      </h3>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await serversApi.createInvite(serverId);
+                            const updated = await serversApi.invites(serverId);
+                            setInvites(updated);
+                          } catch {}
+                        }}
+                        className="btn btn-primary text-sm px-3 py-1.5"
+                      >
+                        Create Invite
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Manage invite links for this server.
+                    </p>
+                    {invites.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Link2 size={24} className="mx-auto text-gray-600 mb-2" />
+                        <p className="text-sm text-gray-500">No active invites</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {invites.map((inv, i) => (
+                          <div key={inv.code || i} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/5">
+                            <div className="flex-1">
+                              <p className="text-sm text-indigo-300 font-mono">{inv.code || 'invite-code'}</p>
+                              <p className="text-xs text-gray-500">
+                                Uses: {inv.uses ?? 0}{inv.max_uses ? ` / ${inv.max_uses}` : ''}
+                                {inv.inviter?.username && ` • By ${inv.inviter.username}`}
+                                {inv.expires_at && ` • Expires ${new Date(inv.expires_at).toLocaleDateString()}`}
+                              </p>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await serversApi.deleteInvite(inv.code);
+                                  setInvites(invites.filter(x => x.code !== inv.code));
+                                } catch {}
+                              }}
+                              className="p-1.5 hover:bg-red-500/20 rounded text-gray-400 hover:text-red-400 transition-colors"
+                              title="Revoke invite"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'safety' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                        <Zap size={16} /> Auto-Moderation
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Configure automatic moderation to keep your server safe.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div>
+                          <p className="text-sm text-white">Slowmode</p>
+                          <p className="text-xs text-gray-500">Rate-limit messages per channel</p>
+                        </div>
+                        <select className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-sm text-white">
+                          <option value="0">Off</option>
+                          <option value="5">5 seconds</option>
+                          <option value="10">10 seconds</option>
+                          <option value="30">30 seconds</option>
+                          <option value="60">1 minute</option>
+                          <option value="300">5 minutes</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div>
+                          <p className="text-sm text-white">Anti-Spam</p>
+                          <p className="text-xs text-gray-500">Detect and remove spam messages</p>
+                        </div>
+                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
+                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div>
+                          <p className="text-sm text-white">Anti-Raid</p>
+                          <p className="text-xs text-gray-500">Detect rapid mass joins</p>
+                        </div>
+                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
+                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div>
+                          <p className="text-sm text-white">Block Links</p>
+                          <p className="text-xs text-gray-500">Prevent posting of external links</p>
+                        </div>
+                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
+                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div>
+                          <p className="text-sm text-white">Mention Spam Protection</p>
+                          <p className="text-xs text-gray-500">Limit excessive @mentions</p>
+                        </div>
+                        <button className="w-10 h-5 rounded-full bg-gray-600 relative transition-all">
+                          <div className="w-4 h-4 rounded-full bg-white absolute top-0.5 left-[2px] transition-all" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white/5 rounded-lg mt-4">
+                      <p className="text-xs text-gray-500">
+                        ⚠️ Auto-moderation settings are conceptual and will be connected to backend functionality in a future update.
+                      </p>
                     </div>
                   </div>
                 )}

@@ -96,6 +96,12 @@ export const servers = {
   // Server Settings
   getSettings: (id: string) => request<any>(`/servers/${id}/settings`),
   updateSettings: (id: string, data: any) => request<any>(`/servers/${id}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Audit logs, bans, invites
+  auditLogs: (id: string) => request<any[]>(`/servers/${id}/audit-logs`),
+  bans: (id: string) => request<any[]>(`/servers/${id}/bans`),
+  invites: (id: string) => request<any[]>(`/servers/${id}/invites`),
+  createInvite: (id: string, data?: any) => request<any>(`/servers/${id}/invites`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  deleteInvite: (code: string) => request<any>(`/invites/${code}`, { method: 'DELETE' }),
 };
 
 // Messages

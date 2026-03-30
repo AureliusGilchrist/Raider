@@ -67,6 +67,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // Accent color
     document.documentElement.style.setProperty('--accent-color', s.accent_color);
 
+    // Space theme
+    body.classList.toggle('space-theme', s.color_scheme === 'space');
+
     // Custom CSS
     let styleEl = document.getElementById('raider-custom-css');
     if (s.custom_css) {

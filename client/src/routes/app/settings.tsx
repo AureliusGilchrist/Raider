@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { GlassPanel } from '../../components/GlassPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -6,7 +6,7 @@ import { auth as authApi, twofa as twofaApi } from '../../lib/api';
 import type { UserSettings } from '../../lib/types';
 import { GENDER_OPTIONS_BASIC, GENDER_OPTIONS_ADVANCED, PRONOUN_OPTIONS, LANGUAGE_OPTIONS } from '../../lib/types';
 import {
-  User, Shield, Palette, Bell, Eye, Monitor, Save, X,
+  User, Shield, Palette, Bell, Eye, Monitor, Save, X, Headphones,
 } from 'lucide-react';
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -52,7 +52,140 @@ const COLOR_SCHEMES = [
   { id: 'midnight', name: 'Midnight', colors: ['#312e81', '#1e1b4b', '#0f0a3c'] },
   { id: 'bronze', name: 'Bronze', colors: ['#b87333', '#a0522d', '#8b4513'] },
   { id: 'neon', name: 'Neon', colors: ['#39ff14', '#00ff87', '#00e5ff'] },
+  { id: 'space', name: '🚀 Space', colors: ['#0b0d21', '#1a0a2e', '#0d1b3e'] },
 ] as const;
+
+function AudioSettings() {
+  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedOutput, setSelectedOutput] = useState(localStorage.getItem('raider_audio_output') || 'default');
+  const [selectedInput, setSelectedInput] = useState(localStorage.getItem('raider_audio_input') || 'default');
+  const [masterVolume, setMasterVolume] = useState(Number(localStorage.getItem('raider_audio_volume') || '100'));
+  const [micVolume, setMicVolume] = useState(Number(localStorage.getItem('raider_mic_volume') || '100'));
+  const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('raider_noise_suppression') !== 'false');
+  const [echoCancellation, setEchoCancellation] = useState(localStorage.getItem('raider_echo_cancellation') !== 'false');
+  const [autoGainControl, setAutoGainControl] = useState(localStorage.getItem('raider_auto_gain') !== 'false');
+  const [micTesting, setMicTesting] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number>(0);
+
+  useEffect(() => {
+    async function loadDevices() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setOutputDevices(devices.filter(d => d.kind === 'audiooutput'));
+        setInputDevices(devices.filter(d => d.kind === 'audioinput'));
+      } catch { /* permission denied */ }
+    }
+    loadDevices();
+    return () => {
+      if (micStreamRef.current) micStreamRef.current.getTracks().forEach(t => t.stop());
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
+
+  const saveSetting = (key: string, value: string) => localStorage.setItem(key, value);
+
+  const toggleMicTest = async () => {
+    if (micTesting) {
+      if (micStreamRef.current) micStreamRef.current.getTracks().forEach(t => t.stop());
+      micStreamRef.current = null;
+      cancelAnimationFrame(animFrameRef.current);
+      setMicLevel(0);
+      setMicTesting(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: selectedInput !== 'default' ? { exact: selectedInput } : undefined,
+          noiseSuppression,
+          echoCancellation,
+          autoGainControl,
+        },
+      });
+      micStreamRef.current = stream;
+      setMicTesting(true);
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setMicLevel(Math.min(100, (avg / 128) * 100));
+        animFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch { /* mic access denied */ }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Output Device (Speakers)</label>
+        <select
+          value={selectedOutput}
+          onChange={(e) => { setSelectedOutput(e.target.value); saveSetting('raider_audio_output', e.target.value); }}
+          className="w-full"
+        >
+          <option value="default">System Default</option>
+          {outputDevices.map(d => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0, 8)}`}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Input Device (Microphone)</label>
+        <select
+          value={selectedInput}
+          onChange={(e) => { setSelectedInput(e.target.value); saveSetting('raider_audio_input', e.target.value); }}
+          className="w-full"
+        >
+          <option value="default">System Default</option>
+          {inputDevices.map(d => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || `Microphone ${d.deviceId.slice(0, 8)}`}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Master Volume: {masterVolume}%</label>
+        <input type="range" min={0} max={100} value={masterVolume} onChange={(e) => { const v = Number(e.target.value); setMasterVolume(v); saveSetting('raider_audio_volume', String(v)); }} className="w-full accent-indigo-500" />
+      </div>
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Microphone Volume: {micVolume}%</label>
+        <input type="range" min={0} max={100} value={micVolume} onChange={(e) => { const v = Number(e.target.value); setMicVolume(v); saveSetting('raider_mic_volume', String(v)); }} className="w-full accent-indigo-500" />
+      </div>
+      <div className="border-t border-white/10 pt-4 space-y-1">
+        <Toggle checked={noiseSuppression} onChange={(v) => { setNoiseSuppression(v); saveSetting('raider_noise_suppression', String(v)); }} label="Noise Suppression" />
+        <Toggle checked={echoCancellation} onChange={(v) => { setEchoCancellation(v); saveSetting('raider_echo_cancellation', String(v)); }} label="Echo Cancellation" />
+        <Toggle checked={autoGainControl} onChange={(v) => { setAutoGainControl(v); saveSetting('raider_auto_gain', String(v)); }} label="Auto Gain Control" />
+      </div>
+      <div className="border-t border-white/10 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm text-gray-300">Microphone Test</span>
+          <button onClick={toggleMicTest} className={`btn text-sm px-4 py-1.5 ${micTesting ? 'btn-danger' : 'btn-primary'}`}>
+            {micTesting ? 'Stop Test' : 'Test Mic'}
+          </button>
+        </div>
+        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-75"
+            style={{
+              width: `${micLevel}%`,
+              background: micLevel > 80 ? '#ef4444' : micLevel > 50 ? '#f59e0b' : '#22c55e',
+            }}
+          />
+        </div>
+        {micTesting && <p className="text-xs text-gray-500 mt-1">Speak into your microphone to test the input level.</p>}
+      </div>
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { settings, fetch: fetchSettings, update } = useSettingsStore();
@@ -103,6 +236,7 @@ export function SettingsPage() {
     { id: 'privacy', label: 'Privacy', icon: <Eye size={16} /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette size={16} /> },
     { id: 'notifications', label: 'Notifications', icon: <Bell size={16} /> },
+    { id: 'audio', label: 'Audio', icon: <Headphones size={16} /> },
     { id: 'security', label: 'Security', icon: <Shield size={16} /> },
     { id: 'advanced', label: 'Advanced', icon: <Monitor size={16} /> },
   ];
@@ -320,6 +454,14 @@ export function SettingsPage() {
                   <option value="chime">Chime</option>
                 </select>
               </div>
+            </GlassPanel>
+          )}
+
+          {/* Audio Tab */}
+          {tab === 'audio' && (
+            <GlassPanel className="p-6 animate-fade-in">
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Headphones size={18} /> Audio Settings</h2>
+              <AudioSettings />
             </GlassPanel>
           )}
 
