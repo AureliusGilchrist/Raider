@@ -17,13 +17,13 @@ func GetSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme
 		FROM user_settings WHERE user_id = ?`, userID).Scan(
 		&s.UserID, &s.ShowGender, &s.ShowPronouns, &s.ShowLanguages, &s.ShowServers,
 		&s.ShowStats, &s.ShowOnlineStatus, &s.ShowBio, &s.ShowLevel, &s.GlassEffect, &s.GradientBG,
 		&s.GradientColor1, &s.GradientColor2, &s.GradientColor3, &s.AnimationSpeed, &s.Theme, &s.FontSize,
 		&s.ReducedMotion, &s.HighContrast, &s.NotificationDMs, &s.NotificationServers, &s.NotificationCalls,
-		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch, &s.Ringtone)
+		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch, &s.Ringtone, &s.ColorScheme)
 	if err != nil {
 		// Create default settings if not found
 		db.DB.Exec("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", userID)
@@ -53,6 +53,7 @@ func GetSettings(w http.ResponseWriter, r *http.Request) {
 			ShowBanner:          true,
 			ShowInSearch:        true,
 			Ringtone:            "default",
+			ColorScheme:         "default",
 		}
 	}
 
@@ -72,25 +73,25 @@ func UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(user_id) DO UPDATE SET
 		show_gender=?, show_pronouns=?, show_languages=?, show_servers=?,
 		show_stats=?, show_online_status=?, show_bio=?, show_level=?, glass_effect=?, gradient_bg=?,
 		gradient_color1=?, gradient_color2=?, gradient_color3=?, animation_speed=?, theme=?, font_size=?,
 		reduced_motion=?, high_contrast=?, notification_dms=?, notification_servers=?, notification_calls=?,
-		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?, ringtone=?`,
+		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?, ringtone=?, color_scheme=?`,
 		userID, s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
-		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone,
+		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone, s.ColorScheme,
 		// ON CONFLICT update values
 		s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
-		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone)
+		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone, s.ColorScheme)
 	if err != nil {
 		jsonError(w, "Failed to update settings", http.StatusInternalServerError)
 		return
@@ -268,11 +269,11 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := db.DB.QueryRow(`SELECT id, username, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, peer_id, advanced_mode, xp, level, created_at
+		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, peer_id, advanced_mode, xp, level, card_artwork_url, created_at
 		FROM users WHERE id = ?`, targetID).Scan(
 		&user.ID, &user.Username, &user.DisplayName, &user.Bio, &user.AvatarURL, &user.AvatarType,
 		&user.BannerURL, &user.BannerType, &user.Gender, &user.GenderCustom, &user.Pronouns, &user.Languages, &user.PublicKey,
-		&user.PeerID, &user.AdvancedMode, &user.XP, &user.Level, &user.CreatedAt)
+		&user.PeerID, &user.AdvancedMode, &user.XP, &user.Level, &user.CardArtworkURL, &user.CreatedAt)
 	if err != nil {
 		jsonError(w, "User not found", http.StatusNotFound)
 		return

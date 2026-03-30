@@ -116,13 +116,13 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	var passwordHash string
 	err := db.DB.QueryRow(`SELECT id, username, email, password_hash, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level
+		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, card_artwork_url
 		FROM users WHERE email = ?`, req.Email).Scan(
 		&user.ID, &user.Username, &user.Email, &passwordHash, &user.DisplayName, &user.Bio,
 		&user.AvatarURL, &user.AvatarType, &user.BannerURL, &user.BannerType,
 		&user.Gender, &user.GenderCustom, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
-		&user.XP, &user.Level)
+		&user.XP, &user.Level, &user.CardArtworkURL)
 	if err != nil {
 		jsonError(w, "Invalid credentials", http.StatusUnauthorized)
 		return
@@ -130,6 +130,19 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
 		jsonError(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if 2FA is enabled
+	var twoFactorEnabled bool
+	var twoFactorSecret string
+	db.DB.QueryRow("SELECT COALESCE(us.two_factor_enabled, 0), COALESCE(u.two_factor_secret, '') FROM users u LEFT JOIN user_settings us ON u.id = us.user_id WHERE u.id = ?", user.ID).Scan(&twoFactorEnabled, &twoFactorSecret)
+	if twoFactorEnabled && twoFactorSecret != "" {
+		// 2FA is required - return a partial response requiring 2FA verification
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"requires_2fa": true,
+			"user_id":      user.ID,
+		})
 		return
 	}
 
@@ -150,13 +163,13 @@ func GetMe(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := db.DB.QueryRow(`SELECT id, username, email, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, status, status_message
+		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, status, status_message, card_artwork_url
 		FROM users WHERE id = ?`, userID).Scan(
 		&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.Bio,
 		&user.AvatarURL, &user.AvatarType, &user.BannerURL, &user.BannerType,
 		&user.Gender, &user.GenderCustom, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
-		&user.XP, &user.Level, &user.Status, &user.StatusMessage)
+		&user.XP, &user.Level, &user.Status, &user.StatusMessage, &user.CardArtworkURL)
 	if err != nil {
 		jsonError(w, "User not found", http.StatusNotFound)
 		return
@@ -206,6 +219,9 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.StatusMessage != nil {
 		db.DB.Exec("UPDATE users SET status_message = ? WHERE id = ?", *req.StatusMessage, userID)
+	}
+	if req.CardArtworkURL != nil {
+		db.DB.Exec("UPDATE users SET card_artwork_url = ? WHERE id = ?", *req.CardArtworkURL, userID)
 	}
 
 	// Return updated user

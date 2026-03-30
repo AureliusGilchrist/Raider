@@ -28,6 +28,7 @@ type User struct {
 	Status              string    `json:"status"`
 	StatusMessage       string    `json:"status_message"`
 	CardArtworkURL      string    `json:"card_artwork_url"`
+	TwoFactorSecret     string    `json:"-"`
 	CreatedAt           time.Time `json:"created_at"`
 	LastSeen            time.Time `json:"last_seen"`
 }

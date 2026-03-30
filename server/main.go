@@ -38,6 +38,7 @@ func main() {
 	// Public routes
 	r.Post("/api/auth/register", handlers.Register)
 	r.Post("/api/auth/login", handlers.Login)
+	r.Post("/api/auth/2fa/verify-login", handlers.Verify2FALogin)
 
 	// WebSocket (auth via query param)
 	r.Get("/ws", handlers.HandleWebSocket)
@@ -58,6 +59,11 @@ func main() {
 		// Settings
 		r.Get("/api/settings", handlers.GetSettings)
 		r.Put("/api/settings", handlers.UpdateSettings)
+
+		// 2FA
+		r.Post("/api/2fa/setup", handlers.Setup2FA)
+		r.Post("/api/2fa/verify", handlers.Verify2FA)
+		r.Post("/api/2fa/disable", handlers.Disable2FA)
 
 		// Stats & Gamification
 		r.Get("/api/stats", handlers.GetUserStats)

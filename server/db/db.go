@@ -60,6 +60,7 @@ func migrate() {
 		status TEXT DEFAULT 'online',
 		status_message TEXT DEFAULT '',
 		card_artwork_url TEXT DEFAULT '',
+		two_factor_secret TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -549,6 +550,7 @@ func migrate() {
 		`ALTER TABLE server_members ADD COLUMN handshake_token TEXT DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN card_artwork_url TEXT DEFAULT ''`,
 		`ALTER TABLE user_settings ADD COLUMN color_scheme TEXT DEFAULT 'default'`,
+		`ALTER TABLE users ADD COLUMN two_factor_secret TEXT DEFAULT ''`,
 	}
 	for _, m := range additiveMigrations {
 		DB.Exec(m) // intentionally ignore error (column may already exist)
