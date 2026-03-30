@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Megaphone, X, Edit3, Pin } from 'lucide-react';
 import { servers as serversApi } from '../lib/api';
+import { useWSStore } from '../stores/wsStore';
 
 interface ServerAnnouncement {
   id: string;
@@ -25,12 +26,9 @@ export function ServerAnnouncementBanner({ serverId, canEdit, onEdit }: ServerAn
   const [announcement, setAnnouncement] = useState<ServerAnnouncement | null>(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
+  const { on } = useWSStore();
 
-  useEffect(() => {
-    loadAnnouncement();
-  }, [serverId]);
-
-  const loadAnnouncement = async () => {
+  const loadAnnouncement = useCallback(async () => {
     try {
       const data = await serversApi.getAnnouncement(serverId);
       setAnnouncement(data);
@@ -39,7 +37,35 @@ export function ServerAnnouncementBanner({ serverId, canEdit, onEdit }: ServerAn
     } finally {
       setLoading(false);
     }
-  };
+  }, [serverId]);
+
+  useEffect(() => {
+    loadAnnouncement();
+  }, [loadAnnouncement]);
+
+  useEffect(() => {
+    const unsubNew = on('server_announcement_new', (msg) => {
+      if (msg.payload?.server_id === serverId) {
+        setAnnouncement(msg.payload);
+        setDismissed(false);
+      }
+    });
+    const unsubUpdated = on('server_announcement_updated', (msg) => {
+      if (msg.payload?.server_id === serverId) {
+        loadAnnouncement();
+      }
+    });
+    const unsubDeleted = on('server_announcement_deleted', (msg) => {
+      if (msg.payload?.server_id === serverId) {
+        setAnnouncement(null);
+      }
+    });
+    return () => {
+      unsubNew();
+      unsubUpdated();
+      unsubDeleted();
+    };
+  }, [serverId, on, loadAnnouncement]);
 
   if (loading || !announcement || dismissed) {
     return null;

@@ -70,10 +70,13 @@ function AudioSettings() {
   const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('raider_noise_suppression') !== 'false');
   const [echoCancellation, setEchoCancellation] = useState(localStorage.getItem('raider_echo_cancellation') !== 'false');
   const [autoGainControl, setAutoGainControl] = useState(localStorage.getItem('raider_auto_gain') !== 'false');
+  const [hearMyself, setHearMyself] = useState(localStorage.getItem('raider_hear_myself') === 'true');
   const [micTesting, setMicTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const micStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
+  const hearMyselfCtxRef = useRef<AudioContext | null>(null);
+  const hearMyselfStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     async function loadDevices() {
@@ -88,10 +91,41 @@ function AudioSettings() {
     return () => {
       if (micStreamRef.current) micStreamRef.current.getTracks().forEach(t => t.stop());
       cancelAnimationFrame(animFrameRef.current);
+      hearMyselfCtxRef.current?.close();
+      hearMyselfStreamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
   const saveSetting = (key: string, value: string) => localStorage.setItem(key, value);
+
+  const toggleHearMyself = async () => {
+    if (hearMyself) {
+      hearMyselfCtxRef.current?.close();
+      hearMyselfCtxRef.current = null;
+      hearMyselfStreamRef.current?.getTracks().forEach(t => t.stop());
+      hearMyselfStreamRef.current = null;
+      setHearMyself(false);
+      saveSetting('raider_hear_myself', 'false');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: selectedInput !== 'default' ? { exact: selectedInput } : undefined,
+          noiseSuppression,
+          echoCancellation,
+          autoGainControl,
+        },
+      });
+      hearMyselfStreamRef.current = stream;
+      const ctx = new AudioContext();
+      hearMyselfCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      source.connect(ctx.destination);
+      setHearMyself(true);
+      saveSetting('raider_hear_myself', 'true');
+    } catch { /* mic access denied */ }
+  };
 
   const toggleMicTest = async () => {
     if (micTesting) {
@@ -169,6 +203,7 @@ function AudioSettings() {
         <Toggle checked={noiseSuppression} onChange={(v) => { setNoiseSuppression(v); saveSetting('raider_noise_suppression', String(v)); }} label="Noise Suppression" />
         <Toggle checked={echoCancellation} onChange={(v) => { setEchoCancellation(v); saveSetting('raider_echo_cancellation', String(v)); }} label="Echo Cancellation" />
         <Toggle checked={autoGainControl} onChange={(v) => { setAutoGainControl(v); saveSetting('raider_auto_gain', String(v)); }} label="Auto Gain Control" />
+        <Toggle checked={hearMyself} onChange={() => toggleHearMyself()} label="Hear Myself (Mic Monitoring)" />
       </div>
       <div className="border-t border-white/10 pt-4">
         <div className="flex items-center justify-between mb-2">

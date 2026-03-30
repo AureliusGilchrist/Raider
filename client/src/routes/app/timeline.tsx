@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { Avatar } from '../../components/Avatar';
@@ -62,6 +62,10 @@ function InlineComments({ postId }: { postId: string }) {
   );
 }
 
+// Module-level guard — persists across navigation so mid-flight votes can't be
+// double-submitted by quickly leaving and returning to the page.
+const inFlightVotes = new Set<string>();
+
 export function TimelinePage() {
   const { user: me } = useAuthStore();
   const { on } = useWSStore();
@@ -80,6 +84,7 @@ export function TimelinePage() {
   const [editContent, setEditContent] = useState('');
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [votingPosts, setVotingPosts] = useState<Set<string>>(new Set());
+  const votingPostsRef = useRef(inFlightVotes);
 
   useEffect(() => {
     setLoading(true);
@@ -124,8 +129,9 @@ export function TimelinePage() {
   }, [on]);
 
   const handleVote = async (postId: string, vote: number) => {
-    if (votingPosts.has(postId)) return;
-    setVotingPosts((prev) => new Set(prev).add(postId));
+    if (votingPostsRef.current.has(postId)) return;
+    votingPostsRef.current.add(postId);
+    setVotingPosts(new Set(votingPostsRef.current));
     try {
       await postsApi.vote(postId, vote);
       setItems((prev) =>
@@ -143,7 +149,8 @@ export function TimelinePage() {
         })
       );
     } catch {}
-    setVotingPosts((prev) => { const n = new Set(prev); n.delete(postId); return n; });
+    votingPostsRef.current.delete(postId);
+    setVotingPosts(new Set(votingPostsRef.current));
   };
 
   const handleCreate = async (e: React.FormEvent) => {

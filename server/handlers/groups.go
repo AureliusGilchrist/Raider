@@ -59,16 +59,27 @@ func GetGroupChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get group details
-	var group map[string]interface{}
+	var gID, gName, gIconURL, gCreatorID, gCreatorName string
+	var gMemberCount int
+	var gCreatedAt interface{}
 	err := db.DB.QueryRow(`SELECT g.id, g.name, g.icon_url, g.creator_id, g.member_count, g.created_at,
 		u.username as creator_name
 		FROM group_chats g
 		JOIN users u ON g.creator_id = u.id
 		WHERE g.id = ?`, groupID).Scan(
-		&group["id"], &group["name"], &group["icon_url"], &group["creator_id"], &group["member_count"], &group["created_at"], &group["creator_name"])
+		&gID, &gName, &gIconURL, &gCreatorID, &gMemberCount, &gCreatedAt, &gCreatorName)
 	if err != nil {
 		jsonError(w, "Group not found", http.StatusNotFound)
 		return
+	}
+	group := map[string]interface{}{
+		"id":           gID,
+		"name":         gName,
+		"icon_url":     gIconURL,
+		"creator_id":   gCreatorID,
+		"member_count": gMemberCount,
+		"created_at":   gCreatedAt,
+		"creator_name": gCreatorName,
 	}
 
 	// Get members

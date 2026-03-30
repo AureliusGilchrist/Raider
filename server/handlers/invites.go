@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"raider/crypto"
 	"raider/db"
 	"raider/middleware"
 
@@ -96,12 +97,24 @@ func GetServerInvites(w http.ResponseWriter, r *http.Request) {
 
 	invites := []map[string]interface{}{}
 	for rows.Next() {
-		var i map[string]interface{}
-		var expiresAt interface{}
-		rows.Scan(&i["code"], &i["server_id"], &i["channel_id"], &i["inviter_id"], &i["uses"], &i["max_uses"],
-			&i["max_age"], &i["temporary"], &i["created_at"], &expiresAt, &i["inviter_name"])
-		i["expires_at"] = expiresAt
-		invites = append(invites, i)
+		var code, serverID2, channelID, inviterID, inviterName string
+		var uses, maxUses, maxAge, temporary int
+		var createdAt, expiresAt interface{}
+		rows.Scan(&code, &serverID2, &channelID, &inviterID, &uses, &maxUses,
+			&maxAge, &temporary, &createdAt, &expiresAt, &inviterName)
+		invites = append(invites, map[string]interface{}{
+			"code":         code,
+			"server_id":    serverID2,
+			"channel_id":   channelID,
+			"inviter_id":   inviterID,
+			"uses":         uses,
+			"max_uses":     maxUses,
+			"max_age":      maxAge,
+			"temporary":    temporary,
+			"created_at":   createdAt,
+			"expires_at":   expiresAt,
+			"inviter_name": inviterName,
+		})
 	}
 
 	jsonResponse(w, http.StatusOK, invites)
@@ -181,7 +194,7 @@ func UseInvite(w http.ResponseWriter, r *http.Request) {
 	db.DB.QueryRow("SELECT public_key FROM users WHERE id = ?", userID).Scan(&userPubKey)
 
 	// Generate handshake token (server handshake)
-	token := generateHandshakeToken(userPubKey, serverPubKey)
+	token := crypto.GenerateHandshakeToken(userPubKey, serverPubKey)
 
 	// Add member
 	db.DB.Exec(`INSERT INTO server_members (server_id, user_id, handshake_token) VALUES (?, ?, ?)`,

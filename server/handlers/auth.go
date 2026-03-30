@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -131,8 +132,12 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		&user.Gender, &user.GenderCustom, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
 		&user.XP, &user.Level, &user.CardArtworkURL)
-	if err != nil {
+	if err == sql.ErrNoRows {
 		jsonError(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		jsonError(w, "Service temporarily unavailable, please try again", http.StatusServiceUnavailable)
 		return
 	}
 

@@ -8,6 +8,7 @@ import { Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe, Use
 import { StatusIndicator } from '../components/StatusIndicator';
 import { useIdleDetector } from '../hooks/useIdleDetector';
 import { useWSStore } from '../stores/wsStore';
+import { ThemeLayer } from '../components/ThemeLayer';
 
 export function AppLayout() {
   const { user, logout, setUser } = useAuthStore();
@@ -66,6 +67,7 @@ export function AppLayout() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
+      <ThemeLayer />
       <AnnouncementBanner />
 
       <div className="flex flex-1 overflow-hidden">

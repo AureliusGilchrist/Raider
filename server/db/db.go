@@ -19,10 +19,14 @@ func Init() {
 
 	dbPath := filepath.Join(dataDir, "raider.db")
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on")
+	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
+
+	// SQLite works best with a single connection; WAL allows concurrent reads
+	// but a pool > 1 can cause SQLITE_BUSY races on startup WAL recovery.
+	DB.SetMaxOpenConns(1)
 
 	if err = DB.Ping(); err != nil {
 		log.Fatal("Failed to ping database:", err)

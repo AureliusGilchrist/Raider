@@ -7,6 +7,7 @@ import (
 
 	"raider/db"
 	"raider/middleware"
+	"raider/models"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -86,13 +87,25 @@ func GetServerAnnouncementsHistory(w http.ResponseWriter, r *http.Request) {
 
 	announcements := []map[string]interface{}{}
 	for rows.Next() {
-		var a map[string]interface{}
-		var pinUntil interface{}
-		rows.Scan(&a["id"], &a["server_id"], &a["author_id"], &a["author_name"],
-			&a["content"], &a["color"], &a["icon"], &a["active"],
-			&pinUntil, &a["created_at"], &a["updated_at"])
-		a["pin_until"] = pinUntil
-		announcements = append(announcements, a)
+		var aID, aServerID, aAuthorID, aAuthorName, aContent, aColor, aIcon string
+		var aActive int
+		var aCreatedAt, aUpdatedAt, aPinUntil interface{}
+		rows.Scan(&aID, &aServerID, &aAuthorID, &aAuthorName,
+			&aContent, &aColor, &aIcon, &aActive,
+			&aPinUntil, &aCreatedAt, &aUpdatedAt)
+		announcements = append(announcements, map[string]interface{}{
+			"id":          aID,
+			"server_id":   aServerID,
+			"author_id":   aAuthorID,
+			"author_name": aAuthorName,
+			"content":     aContent,
+			"color":       aColor,
+			"icon":        aIcon,
+			"active":      aActive,
+			"pin_until":   aPinUntil,
+			"created_at":  aCreatedAt,
+			"updated_at":  aUpdatedAt,
+		})
 	}
 
 	jsonResponse(w, http.StatusOK, announcements)
@@ -171,17 +184,23 @@ func CreateServerAnnouncement(w http.ResponseWriter, r *http.Request) {
 	db.DB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&authorName)
 
 	announcement := map[string]interface{}{
-		"id":         announcementID,
-		"server_id":  serverID,
-		"author_id":  userID,
+		"id":          announcementID,
+		"server_id":   serverID,
+		"author_id":   userID,
 		"author_name": authorName,
-		"content":    req.Content,
-		"color":      req.Color,
-		"icon":       req.Icon,
-		"active":     true,
-		"pin_until":  pinUntil,
-		"created_at": time.Now(),
+		"content":     req.Content,
+		"color":       req.Color,
+		"icon":        req.Icon,
+		"active":      true,
+		"pin_until":   pinUntil,
+		"created_at":  time.Now(),
 	}
+
+	// Notify all server members in real time
+	Hub.BroadcastToServer(serverID, models.WSMessage{
+		Type:    "server_announcement_new",
+		Payload: announcement,
+	})
 
 	jsonResponse(w, http.StatusCreated, announcement)
 }
@@ -228,6 +247,12 @@ func UpdateServerAnnouncement(w http.ResponseWriter, r *http.Request) {
 
 	createAuditLog(serverID, userID, 74, announcementID, "announcement", req, "")
 
+	// Notify all server members in real time
+	Hub.BroadcastToServer(serverID, models.WSMessage{
+		Type: "server_announcement_updated",
+		Payload: map[string]interface{}{"server_id": serverID, "announcement_id": announcementID},
+	})
+
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -249,6 +274,12 @@ func DeleteServerAnnouncement(w http.ResponseWriter, r *http.Request) {
 	db.DB.Exec("DELETE FROM server_announcements WHERE id = ?", announcementID)
 
 	createAuditLog(serverID, userID, 75, announcementID, "announcement", nil, "")
+
+	// Notify all server members in real time
+	Hub.BroadcastToServer(serverID, models.WSMessage{
+		Type:    "server_announcement_deleted",
+		Payload: map[string]interface{}{"server_id": serverID, "announcement_id": announcementID},
+	})
 
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

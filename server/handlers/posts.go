@@ -64,7 +64,6 @@ func GetTimeline(w http.ResponseWriter, r *http.Request) {
 	algorithm := r.URL.Query().Get("algorithm") // "chronological" or "for-you"
 
 	var posts []models.Post
-	var err error
 
 	if algorithm == "for-you" {
 		posts = getAlgorithmicFeed(userID)
@@ -245,40 +244,86 @@ func VotePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check existing vote
+	// Prevent self-voting
+	var postAuthorID string
+	if err := db.DB.QueryRow("SELECT author_id FROM posts WHERE id = ?", postID).Scan(&postAuthorID); err != nil {
+		jsonError(w, "Post not found", http.StatusNotFound)
+		return
+	}
+	if postAuthorID == userID {
+		jsonError(w, "Cannot vote on your own post", http.StatusForbidden)
+		return
+	}
+
+	// Read existing vote inside a transaction so concurrent requests can't both
+	// see "no vote" and both INSERT.
+	tx, err := db.DB.Begin()
+	if err != nil {
+		jsonError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	var existingVote int
-	err := db.DB.QueryRow("SELECT vote FROM post_votes WHERE post_id = ? AND user_id = ?", postID, userID).Scan(&existingVote)
-	if err == nil {
+	existingErr := tx.QueryRow("SELECT vote FROM post_votes WHERE post_id = ? AND user_id = ?", postID, userID).Scan(&existingVote)
+
+	// Track whether this is a net new upvote so we award XP/stats exactly once.
+	var awardUpvote bool
+
+	if existingErr == nil {
+		// User already voted
 		if existingVote == req.Vote {
-			// Remove vote
-			db.DB.Exec("DELETE FROM post_votes WHERE post_id = ? AND user_id = ?", postID, userID)
+			// Toggle off — remove vote
+			tx.Exec("DELETE FROM post_votes WHERE post_id = ? AND user_id = ?", postID, userID)
 			if req.Vote == 1 {
-				db.DB.Exec("UPDATE posts SET upvotes = upvotes - 1 WHERE id = ?", postID)
+				tx.Exec("UPDATE posts SET upvotes = MAX(0, upvotes - 1) WHERE id = ?", postID)
 			} else {
-				db.DB.Exec("UPDATE posts SET downvotes = downvotes - 1 WHERE id = ?", postID)
+				tx.Exec("UPDATE posts SET downvotes = MAX(0, downvotes - 1) WHERE id = ?", postID)
+			}
+			// Undo previous upvote stat if applicable
+			if existingVote == 1 {
+				var authorID string
+				tx.QueryRow("SELECT author_id FROM posts WHERE id = ?", postID).Scan(&authorID)
+				tx.Exec("UPDATE user_stats SET upvotes_received = MAX(0, upvotes_received - 1) WHERE user_id = ?", authorID)
 			}
 		} else {
-			// Change vote
-			db.DB.Exec("UPDATE post_votes SET vote = ? WHERE post_id = ? AND user_id = ?", req.Vote, postID, userID)
+			// Change vote direction
+			tx.Exec("UPDATE post_votes SET vote = ? WHERE post_id = ? AND user_id = ?", req.Vote, postID, userID)
 			if req.Vote == 1 {
-				db.DB.Exec("UPDATE posts SET upvotes = upvotes + 1, downvotes = downvotes - 1 WHERE id = ?", postID)
+				tx.Exec("UPDATE posts SET upvotes = upvotes + 1, downvotes = MAX(0, downvotes - 1) WHERE id = ?", postID)
+				awardUpvote = true
 			} else {
-				db.DB.Exec("UPDATE posts SET upvotes = upvotes - 1, downvotes = downvotes + 1 WHERE id = ?", postID)
+				tx.Exec("UPDATE posts SET upvotes = MAX(0, upvotes - 1), downvotes = downvotes + 1 WHERE id = ?", postID)
+				// Undo the previous upvote stat
+				var authorID string
+				tx.QueryRow("SELECT author_id FROM posts WHERE id = ?", postID).Scan(&authorID)
+				tx.Exec("UPDATE user_stats SET upvotes_received = MAX(0, upvotes_received - 1) WHERE user_id = ?", authorID)
 			}
 		}
 	} else {
-		db.DB.Exec("INSERT INTO post_votes (post_id, user_id, vote) VALUES (?, ?, ?)", postID, userID, req.Vote)
+		// No existing vote — cast a new one
+		_, insertErr := tx.Exec("INSERT OR IGNORE INTO post_votes (post_id, user_id, vote) VALUES (?, ?, ?)", postID, userID, req.Vote)
+		if insertErr != nil {
+			jsonError(w, "Database error", http.StatusInternalServerError)
+			return
+		}
 		if req.Vote == 1 {
-			db.DB.Exec("UPDATE posts SET upvotes = upvotes + 1 WHERE id = ?", postID)
+			tx.Exec("UPDATE posts SET upvotes = upvotes + 1 WHERE id = ?", postID)
+			awardUpvote = true
 		} else {
-			db.DB.Exec("UPDATE posts SET downvotes = downvotes + 1 WHERE id = ?", postID)
+			tx.Exec("UPDATE posts SET downvotes = downvotes + 1 WHERE id = ?", postID)
 		}
 	}
 
-	// Update author stats
-	var authorID string
-	db.DB.QueryRow("SELECT author_id FROM posts WHERE id = ?", postID).Scan(&authorID)
-	if req.Vote == 1 {
+	if err := tx.Commit(); err != nil {
+		jsonError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Award XP / stats only for a net-new upvote
+	if awardUpvote {
+		var authorID string
+		db.DB.QueryRow("SELECT author_id FROM posts WHERE id = ?", postID).Scan(&authorID)
 		db.DB.Exec("UPDATE user_stats SET upvotes_received = upvotes_received + 1 WHERE user_id = ?", authorID)
 		addXP(authorID, 2)
 	}
