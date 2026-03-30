@@ -59,6 +59,7 @@ func migrate() {
 		level INTEGER DEFAULT 1,
 		status TEXT DEFAULT 'online',
 		status_message TEXT DEFAULT '',
+		card_artwork_url TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -94,7 +95,8 @@ func migrate() {
 		accent_color TEXT DEFAULT '#6366f1',
 		show_banner INTEGER DEFAULT 1,
 		show_in_search INTEGER DEFAULT 1,
-		ringtone TEXT DEFAULT 'default'
+		ringtone TEXT DEFAULT 'default',
+		color_scheme TEXT DEFAULT 'default'
 	);
 
 	CREATE TABLE IF NOT EXISTS user_stats (
@@ -140,6 +142,8 @@ func migrate() {
 	CREATE TABLE IF NOT EXISTS server_members (
 		server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
 		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		role TEXT DEFAULT 'member',
+		handshake_token TEXT DEFAULT '',
 		nickname TEXT DEFAULT '',
 		joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (server_id, user_id)
@@ -541,6 +545,10 @@ func migrate() {
 	additiveMigrations := []string{
 		`ALTER TABLE user_settings ADD COLUMN ringtone TEXT DEFAULT 'default'`,
 		`ALTER TABLE call_sessions ADD COLUMN ring_targets TEXT DEFAULT '[]'`,
+		`ALTER TABLE server_members ADD COLUMN role TEXT DEFAULT 'member'`,
+		`ALTER TABLE server_members ADD COLUMN handshake_token TEXT DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN card_artwork_url TEXT DEFAULT ''`,
+		`ALTER TABLE user_settings ADD COLUMN color_scheme TEXT DEFAULT 'default'`,
 	}
 	for _, m := range additiveMigrations {
 		DB.Exec(m) // intentionally ignore error (column may already exist)
