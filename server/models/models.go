@@ -27,6 +27,8 @@ type User struct {
 	Level               int       `json:"level"`
 	Status              string    `json:"status"`
 	StatusMessage       string    `json:"status_message"`
+	CardArtworkURL      string    `json:"card_artwork_url"`
+	TwoFactorSecret     string    `json:"-"`
 	CreatedAt           time.Time `json:"created_at"`
 	LastSeen            time.Time `json:"last_seen"`
 }
@@ -63,6 +65,7 @@ type UserSettings struct {
 	ShowBanner          bool   `json:"show_banner"`
 	ShowInSearch        bool   `json:"show_in_search"`
 	Ringtone            string `json:"ringtone"`
+	ColorScheme         string `json:"color_scheme"`
 }
 
 type UserStats struct {
@@ -297,6 +300,7 @@ type UpdateProfileRequest struct {
 	BannerType    *string `json:"banner_type,omitempty"`
 	Status        *string `json:"status,omitempty"`
 	StatusMessage *string `json:"status_message,omitempty"`
+	CardArtworkURL *string `json:"card_artwork_url,omitempty"`
 }
 
 type VoteRequest struct {

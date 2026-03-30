@@ -67,6 +67,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // Accent color
     document.documentElement.style.setProperty('--accent-color', s.accent_color);
 
+    // Animated themes
+    const animatedThemes = ['space', 'ocean', 'aurora', 'lava', 'matrix', 'sakura'];
+    animatedThemes.forEach(t => body.classList.remove(`${t}-theme`));
+    if (animatedThemes.includes(s.color_scheme)) {
+      body.classList.add(`${s.color_scheme}-theme`);
+    }
+
     // Custom CSS
     let styleEl = document.getElementById('raider-custom-css');
     if (s.custom_css) {

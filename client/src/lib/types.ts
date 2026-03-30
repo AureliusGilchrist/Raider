@@ -20,6 +20,7 @@ export interface User {
   level: number;
   status: string;
   status_message: string;
+  card_artwork_url: string;
   created_at: string;
   last_seen: string;
   is_following?: boolean;
@@ -57,6 +58,7 @@ export interface UserSettings {
   show_banner: boolean;
   show_in_search: boolean;
   ringtone: string;
+  color_scheme: string;
 }
 
 export interface UserStats {

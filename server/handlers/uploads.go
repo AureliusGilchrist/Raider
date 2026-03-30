@@ -161,6 +161,13 @@ func ServeUpload(w http.ResponseWriter, r *http.Request) {
 	userIDParam := chi.URLParam(r, "userID")
 	filename := chi.URLParam(r, "filename")
 
+	// Prevent path traversal
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") ||
+		strings.Contains(userIDParam, "..") || strings.Contains(userIDParam, "/") || strings.Contains(userIDParam, "\\") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
 	filePath := filepath.Join(".", "uploads", userIDParam, filename)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		http.NotFound(w, r)

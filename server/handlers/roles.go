@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"raider/db"
 	"raider/middleware"
@@ -60,7 +61,7 @@ func GetServerRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.DB.Query(`SELECT id, server_id, name, color, position, hoist, mentionable, permissions
+	rows, err := db.DB.Query(`SELECT id, server_id, name, color, position, hoist, mentionable, permissions, created_at
 		FROM server_roles WHERE server_id = ? ORDER BY position DESC`, serverID)
 	if err != nil {
 		jsonError(w, "Failed to fetch roles", http.StatusInternalServerError)
@@ -71,7 +72,7 @@ func GetServerRoles(w http.ResponseWriter, r *http.Request) {
 	roles := []models.ServerRole{}
 	for rows.Next() {
 		var role models.ServerRole
-		rows.Scan(&role.ID, &role.ServerID, &role.Name, &role.Color, &role.Position, &role.Hoist, &role.Mentionable, &role.Permissions)
+		rows.Scan(&role.ID, &role.ServerID, &role.Name, &role.Color, &role.Position, &role.Hoist, &role.Mentionable, &role.Permissions, &role.CreatedAt)
 		roles = append(roles, role)
 	}
 
@@ -130,6 +131,7 @@ func CreateRole(w http.ResponseWriter, r *http.Request) {
 		Hoist:         req.Hoist,
 		Mentionable:   req.Mentionable,
 		Permissions:   req.Permissions,
+		CreatedAt:     time.Now(),
 	}
 
 	jsonResponse(w, http.StatusCreated, role)
@@ -283,7 +285,7 @@ func GetMemberRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.DB.Query(`SELECT r.id, r.server_id, r.name, r.color, r.position, r.hoist, r.mentionable, r.permissions
+	rows, err := db.DB.Query(`SELECT r.id, r.server_id, r.name, r.color, r.position, r.hoist, r.mentionable, r.permissions, r.created_at
 		FROM server_roles r
 		JOIN server_member_roles mr ON r.id = mr.role_id
 		WHERE mr.server_id = ? AND mr.user_id = ?
@@ -297,7 +299,7 @@ func GetMemberRoles(w http.ResponseWriter, r *http.Request) {
 	roles := []models.ServerRole{}
 	for rows.Next() {
 		var role models.ServerRole
-		rows.Scan(&role.ID, &role.ServerID, &role.Name, &role.Color, &role.Position, &role.Hoist, &role.Mentionable, &role.Permissions)
+		rows.Scan(&role.ID, &role.ServerID, &role.Name, &role.Color, &role.Position, &role.Hoist, &role.Mentionable, &role.Permissions, &role.CreatedAt)
 		roles = append(roles, role)
 	}
 

@@ -86,6 +86,7 @@ export const servers = {
   createRole: (id: string, data: any) => request<any>(`/servers/${id}/roles`, { method: 'POST', body: JSON.stringify(data) }),
   updateRole: (id: string, roleId: string, data: any) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteRole: (id: string, roleId: string) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'DELETE' }),
+  memberRoles: (id: string, userId: string) => request<any[]>(`/servers/${id}/members/${userId}/roles`),
   // Server Announcements
   getAnnouncement: (id: string) => request<any>(`/servers/${id}/announcement`),
   getAnnouncements: (id: string) => request<any[]>(`/servers/${id}/announcements`),
@@ -95,6 +96,12 @@ export const servers = {
   // Server Settings
   getSettings: (id: string) => request<any>(`/servers/${id}/settings`),
   updateSettings: (id: string, data: any) => request<any>(`/servers/${id}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Audit logs, bans, invites
+  auditLogs: (id: string) => request<any[]>(`/servers/${id}/audit-logs`),
+  bans: (id: string) => request<any[]>(`/servers/${id}/bans`),
+  invites: (id: string) => request<any[]>(`/servers/${id}/invites`),
+  createInvite: (id: string, data?: any) => request<any>(`/servers/${id}/invites`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  deleteInvite: (code: string) => request<any>(`/invites/${code}`, { method: 'DELETE' }),
 };
 
 // Messages
@@ -186,4 +193,14 @@ export const uploads = {
     request<any>('/avatar', { method: 'POST', body: JSON.stringify({ url, type }) }),
   setBanner: (url: string, type: string) =>
     request<any>('/banner', { method: 'POST', body: JSON.stringify({ url, type }) }),
+  setCardArtwork: (url: string) =>
+    request<any>('/me', { method: 'PUT', body: JSON.stringify({ card_artwork_url: url }) }),
+};
+
+// 2FA
+export const twofa = {
+  setup: () => request<{ secret: string; url: string }>('/2fa/setup', { method: 'POST' }),
+  verify: (code: string) => request<any>('/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+  disable: (code: string) => request<any>('/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+  verifyLogin: (userId: string, code: string) => request<{ token: string; user: any }>('/auth/2fa/verify-login', { method: 'POST', body: JSON.stringify({ user_id: userId, code }) }),
 };
