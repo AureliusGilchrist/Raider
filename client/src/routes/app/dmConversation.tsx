@@ -1,19 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from '@tanstack/react-router';
+import { useParams, Link, useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { Avatar } from '../../components/Avatar';
 import { UnencryptedWarning } from '../../components/AnnouncementBanner';
-import { messages as messagesApi, handshakes, users as usersApi } from '../../lib/api';
+import { messages as messagesApi, handshakes, users as usersApi, calls as callsApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { useWSStore } from '../../stores/wsStore';
 import type { Message } from '../../lib/types';
-import { Send, ArrowLeft } from 'lucide-react';
+import { Send, ArrowLeft, Phone } from 'lucide-react';
 import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
 
 export function DMConversationPage() {
   const { userId } = useParams({ strict: false }) as { userId: string };
   const { user: me } = useAuthStore();
   const { on } = useWSStore();
+  const navigate = useNavigate();
   const emitTyping = useTypingEmitter({ recipientId: userId });
 
   const [msgs, setMsgs] = useState<Message[]>([]);
@@ -60,6 +61,13 @@ export function DMConversationPage() {
     } catch {}
   };
 
+  const handleStartCall = async () => {
+    try {
+      const call = await callsApi.create({ target_id: userId });
+      navigate({ to: '/app/call/$callId', params: { callId: call.id } });
+    } catch {}
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -68,7 +76,7 @@ export function DMConversationPage() {
           <ArrowLeft size={20} />
         </Link>
         {otherUser && (
-          <Link to="/app/profile/$userId" params={{ userId }} className="flex items-center gap-2 hover:opacity-80 transition-all-custom">
+          <Link to="/app/profile/$userId" params={{ userId }} className="flex items-center gap-2 hover:opacity-80 transition-all-custom flex-1 min-w-0">
             <Avatar url={otherUser.avatar_url || ''} type={otherUser.avatar_type || 'image'} size={32} />
             <div>
               <p className="text-sm font-medium text-white">{otherUser.display_name || otherUser.username}</p>
@@ -76,6 +84,13 @@ export function DMConversationPage() {
             </div>
           </Link>
         )}
+        <button
+          onClick={handleStartCall}
+          className="w-9 h-9 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center hover:bg-green-500/40 transition-all-custom shrink-0"
+          title="Start voice call"
+        >
+          <Phone size={16} />
+        </button>
       </div>
 
       {/* Unencrypted warning */}

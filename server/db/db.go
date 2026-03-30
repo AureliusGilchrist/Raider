@@ -91,7 +91,8 @@ func migrate() {
 		custom_css TEXT DEFAULT '',
 		accent_color TEXT DEFAULT '#6366f1',
 		show_banner INTEGER DEFAULT 1,
-		show_in_search INTEGER DEFAULT 1
+		show_in_search INTEGER DEFAULT 1,
+		ringtone TEXT DEFAULT 'default'
 	);
 
 	CREATE TABLE IF NOT EXISTS user_stats (
@@ -202,6 +203,7 @@ func migrate() {
 		creator_id TEXT NOT NULL REFERENCES users(id),
 		server_id TEXT,
 		channel_id TEXT,
+		ring_targets TEXT DEFAULT '[]',
 		active INTEGER DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		ended_at DATETIME
@@ -306,6 +308,16 @@ func migrate() {
 	if err != nil {
 		log.Fatal("Migration failed:", err)
 	}
+
+	// Additive column migrations for existing databases (errors ignored if column already exists)
+	additiveMigrations := []string{
+		`ALTER TABLE user_settings ADD COLUMN ringtone TEXT DEFAULT 'default'`,
+		`ALTER TABLE call_sessions ADD COLUMN ring_targets TEXT DEFAULT '[]'`,
+	}
+	for _, m := range additiveMigrations {
+		DB.Exec(m) // intentionally ignore error (column may already exist)
+	}
+
 	log.Println("Database migrations complete")
 }
 

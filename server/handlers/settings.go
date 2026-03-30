@@ -17,13 +17,13 @@ func GetSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone
 		FROM user_settings WHERE user_id = ?`, userID).Scan(
 		&s.UserID, &s.ShowGender, &s.ShowPronouns, &s.ShowLanguages, &s.ShowServers,
 		&s.ShowStats, &s.ShowOnlineStatus, &s.ShowBio, &s.ShowLevel, &s.GlassEffect, &s.GradientBG,
 		&s.GradientColor1, &s.GradientColor2, &s.GradientColor3, &s.AnimationSpeed, &s.Theme, &s.FontSize,
 		&s.ReducedMotion, &s.HighContrast, &s.NotificationDMs, &s.NotificationServers, &s.NotificationCalls,
-		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch)
+		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch, &s.Ringtone)
 	if err != nil {
 		// Create default settings if not found
 		db.DB.Exec("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", userID)
@@ -52,6 +52,7 @@ func GetSettings(w http.ResponseWriter, r *http.Request) {
 			AccentColor:         "#6366f1",
 			ShowBanner:          true,
 			ShowInSearch:        true,
+			Ringtone:            "default",
 		}
 	}
 
@@ -71,25 +72,25 @@ func UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(user_id) DO UPDATE SET
 		show_gender=?, show_pronouns=?, show_languages=?, show_servers=?,
 		show_stats=?, show_online_status=?, show_bio=?, show_level=?, glass_effect=?, gradient_bg=?,
 		gradient_color1=?, gradient_color2=?, gradient_color3=?, animation_speed=?, theme=?, font_size=?,
 		reduced_motion=?, high_contrast=?, notification_dms=?, notification_servers=?, notification_calls=?,
-		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?`,
+		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?, ringtone=?`,
 		userID, s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
-		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch,
+		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone,
 		// ON CONFLICT update values
 		s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
-		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch)
+		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone)
 	if err != nil {
 		jsonError(w, "Failed to update settings", http.StatusInternalServerError)
 		return

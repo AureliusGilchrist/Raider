@@ -54,6 +54,7 @@ export interface UserSettings {
   accent_color: string;
   show_banner: boolean;
   show_in_search: boolean;
+  ringtone: string;
 }
 
 export interface UserStats {

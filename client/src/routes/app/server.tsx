@@ -1,18 +1,19 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from '@tanstack/react-router';
+import { useParams, useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { Avatar } from '../../components/Avatar';
-import { servers as serversApi, messages as messagesApi, shares as sharesApi } from '../../lib/api';
+import { servers as serversApi, messages as messagesApi, shares as sharesApi, calls as callsApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { useWSStore } from '../../stores/wsStore';
 import type { Channel, Message } from '../../lib/types';
-import { Hash, Volume2, Plus, Send, Users, Share2, X } from 'lucide-react';
+import { Hash, Volume2, Plus, Send, Users, Share2, X, Phone } from 'lucide-react';
 import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
 
 export function ServerPage() {
   const { serverId } = useParams({ strict: false }) as { serverId: string };
   const { user } = useAuthStore();
   const { send, on } = useWSStore();
+  const navigate = useNavigate();
 
   const [server, setServer] = useState<any>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -24,6 +25,9 @@ export function ServerPage() {
   const [newChannelName, setNewChannelName] = useState('');
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [shareComment, setShareComment] = useState('');
+  // Ring target selector state
+  const [showRingPicker, setShowRingPicker] = useState(false);
+  const [selectedRingTargets, setSelectedRingTargets] = useState<string[]>([]);
   const emitTyping = useTypingEmitter({ channelId: activeChannel || undefined });
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevChannelRef = useRef<string | null>(null);
@@ -109,8 +113,69 @@ export function ServerPage() {
     } catch {}
   };
 
+  const toggleRingTarget = (memberId: string) => {
+    setSelectedRingTargets((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId],
+    );
+  };
+
+  const handleStartCall = async () => {
+    if (!activeChannel) return;
+    try {
+      const call = await callsApi.create({
+        server_id: serverId,
+        channel_id: activeChannel,
+        ring_targets: selectedRingTargets.length > 0 ? selectedRingTargets : undefined,
+      });
+      setShowRingPicker(false);
+      setSelectedRingTargets([]);
+      navigate({ to: '/app/call/$callId', params: { callId: call.id } });
+    } catch {}
+  };
+
   return (
     <div className="flex h-full relative">
+      {/* Ring target picker dialog */}
+      {showRingPicker && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <GlassPanel className="p-6 w-full max-w-sm mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Phone size={18} /> Start Group Call
+              </h3>
+              <button onClick={() => setShowRingPicker(false)} className="text-gray-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              Select members to ring. Leave all unchecked to ring everyone.
+            </p>
+            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto mb-4">
+              {members
+                .filter((m) => m.id !== user?.id)
+                .map((m) => (
+                  <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedRingTargets.includes(m.id)}
+                      onChange={() => toggleRingTarget(m.id)}
+                      className="w-4 h-4 accent-indigo-500"
+                    />
+                    <Avatar url={m.avatar_url || ''} type="image" size={24} />
+                    <span className="text-sm text-gray-200">{m.display_name || m.username}</span>
+                  </label>
+                ))}
+            </div>
+            <button onClick={handleStartCall} className="btn btn-primary w-full">
+              <Phone size={14} />
+              {selectedRingTargets.length > 0
+                ? `Ring ${selectedRingTargets.length} member${selectedRingTargets.length !== 1 ? 's' : ''}`
+                : 'Ring Everyone'}
+            </button>
+          </GlassPanel>
+        </div>
+      )}
+
       {/* Share dialog */}
       {shareMsg && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
@@ -191,9 +256,17 @@ export function ServerPage() {
           <>
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
               <Hash size={16} className="text-gray-400" />
-              <span className="text-white font-medium text-sm">
+              <span className="text-white font-medium text-sm flex-1 truncate">
                 {channels.find((c) => c.id === activeChannel)?.name || ''}
               </span>
+              {/* Call button */}
+              <button
+                onClick={() => { setSelectedRingTargets([]); setShowRingPicker(true); }}
+                className="w-8 h-8 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center hover:bg-green-500/40 transition-all-custom shrink-0"
+                title="Start call in this channel"
+              >
+                <Phone size={14} />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 flex flex-col">
