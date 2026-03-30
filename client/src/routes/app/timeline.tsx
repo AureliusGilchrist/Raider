@@ -3,9 +3,13 @@ import { Link } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { Avatar } from '../../components/Avatar';
 import { useAuthStore } from '../../stores/authStore';
-import { posts as postsApi, shares as sharesApi } from '../../lib/api';
+import { posts as postsApi, shares as sharesApi, uploads as uploadsApi } from '../../lib/api';
 import type { Post, Share, Comment } from '../../lib/types';
-import { ArrowUp, ArrowDown, MessageCircle, Plus, Send, Share2, X, Repeat2, Pencil, Trash2, Check } from 'lucide-react';
+import { ArrowUp, ArrowDown, MessageCircle, Plus, Send, Share2, X, Repeat2, Pencil, Trash2, Check, HelpCircle, Image as ImageIcon } from 'lucide-react';
+import { FormattedText } from '../../components/FormattedText';
+import { FormatHelper } from '../../components/FormatHelper';
+import { useWSStore } from '../../stores/wsStore';
+import { MediaViewer } from '../../components/MediaViewer';
 
 function InlineComments({ postId }: { postId: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -36,7 +40,7 @@ function InlineComments({ postId }: { postId: string }) {
           {comments.map((c) => (
             <div key={c.id} className="flex gap-2">
               <span className="text-xs font-semibold text-indigo-300 shrink-0">{c.author_name}</span>
-              <p className="text-xs text-gray-300">{c.content}</p>
+              <p className="text-xs text-gray-300"><FormattedText text={c.content} /></p>
             </div>
           ))}
         </div>
@@ -60,56 +64,103 @@ function InlineComments({ postId }: { postId: string }) {
 
 export function TimelinePage() {
   const { user: me } = useAuthStore();
+  const { on } = useWSStore();
   const [items, setItems] = useState<Post[]>([]);
   const [sharedItems, setSharedItems] = useState<Share[]>([]);
   const [loading, setLoading] = useState(true);
+  const [algorithm, setAlgorithm] = useState<'for-you' | 'chronological'>('for-you');
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [shareTarget, setShareTarget] = useState<{ type: 'post'; id: string } | null>(null);
   const [shareComment, setShareComment] = useState('');
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [votingPosts, setVotingPosts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([
-      postsApi.timeline().catch(() => []),
+      postsApi.timeline(algorithm).catch(() => []),
       sharesApi.timeline().catch(() => []),
     ]).then(([posts, shares]) => {
       setItems(posts || []);
       setSharedItems(shares || []);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [algorithm]);
+
+  // WebSocket listeners for real-time updates
+  useEffect(() => {
+    const unsubNewPost = on('new_post', (msg) => {
+      const post = msg.payload as Post;
+      setItems((prev) => {
+        if (prev.some((p) => p.id === post.id)) return prev;
+        return [post, ...prev];
+      });
+    });
+
+    const unsubVote = on('post_vote_update', (msg) => {
+      const { post_id, upvotes, downvotes } = msg.payload;
+      setItems((prev) =>
+        prev.map((p) => (p.id === post_id ? { ...p, upvotes, downvotes } : p))
+      );
+    });
+
+    const unsubComment = on('post_comment', (msg) => {
+      const { post_id, comment_count } = msg.payload;
+      setItems((prev) =>
+        prev.map((p) => (p.id === post_id ? { ...p, comment_count } : p))
+      );
+    });
+
+    return () => {
+      unsubNewPost();
+      unsubVote();
+      unsubComment();
+    };
+  }, [on]);
 
   const handleVote = async (postId: string, vote: number) => {
+    if (votingPosts.has(postId)) return;
+    setVotingPosts((prev) => new Set(prev).add(postId));
     try {
       await postsApi.vote(postId, vote);
       setItems((prev) =>
         prev.map((p) => {
           if (p.id !== postId) return p;
           const oldVote = p.user_vote;
+          const newVote = oldVote === vote ? 0 : vote;
           let upvotes = p.upvotes;
           let downvotes = p.downvotes;
           if (oldVote === 1) upvotes--;
           if (oldVote === -1) downvotes--;
-          if (vote === 1) upvotes++;
-          if (vote === -1) downvotes++;
-          return { ...p, upvotes, downvotes, user_vote: oldVote === vote ? 0 : vote };
+          if (newVote === 1) upvotes++;
+          if (newVote === -1) downvotes++;
+          return { ...p, upvotes, downvotes, user_vote: newVote };
         })
       );
     } catch {}
+    setVotingPosts((prev) => { const n = new Set(prev); n.delete(postId); return n; });
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     try {
-      const post = await postsApi.create({ title, content, media_url: '' });
+      // Upload media files first
+      const mediaUrls: string[] = [];
+      for (const file of mediaFiles) {
+        const uploadRes = await uploadsApi.upload(file);
+        if (uploadRes?.url) mediaUrls.push(uploadRes.url);
+      }
+      const post = await postsApi.create({ title, content, media_urls: mediaUrls });
       setItems((prev) => [post, ...prev]);
       setTitle('');
       setContent('');
+      setMediaFiles([]);
       setShowCreate(false);
     } catch {}
   };
@@ -167,9 +218,29 @@ export function TimelinePage() {
     <div className="max-w-2xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">Timeline</h1>
-        <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary">
-          <Plus size={16} /> Post
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-white/10 rounded-lg p-1">
+            <button
+              onClick={() => setAlgorithm('for-you')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all-custom ${
+                algorithm === 'for-you' ? 'bg-indigo-500 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              For You
+            </button>
+            <button
+              onClick={() => setAlgorithm('chronological')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all-custom ${
+                algorithm === 'chronological' ? 'bg-indigo-500 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Latest
+            </button>
+          </div>
+          <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary">
+            <Plus size={16} /> Post
+          </button>
+        </div>
       </div>
 
       {showCreate && (
@@ -188,9 +259,37 @@ export function TimelinePage() {
               onChange={(e) => setContent(e.target.value)}
               rows={3}
             />
-            <button type="submit" className="btn btn-primary self-end">
-              <Send size={14} /> Post
-            </button>
+            {mediaFiles.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {mediaFiles.map((f, i) => (
+                  <div key={i} className="px-2 py-1 bg-white/10 rounded text-xs text-gray-300 flex items-center gap-1">
+                    {f.name}
+                    <button onClick={() => setMediaFiles((prev) => prev.filter((_, idx) => idx !== i))} className="text-gray-500 hover:text-red-400">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FormatHelper />
+                <label className="p-2 rounded hover:bg-white/10 cursor-pointer text-gray-400 hover:text-white transition-all-custom">
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setMediaFiles((prev) => [...prev, ...files].slice(0, 4));
+                    }}
+                  />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </label>
+              </div>
+              <button type="submit" className="btn btn-primary">
+                <Send size={14} /> Post
+              </button>
+            </div>
           </form>
         </GlassPanel>
       )}
@@ -255,7 +354,7 @@ export function TimelinePage() {
                         {s.post.edited_at && <span className="text-[10px] text-gray-600">(Edited)</span>}
                       </div>
                       <h4 className="text-white font-semibold text-sm">{s.post.title}</h4>
-                      <p className="text-gray-400 text-xs mt-1">{s.post.content}</p>
+                      <p className="text-gray-400 text-xs mt-1"><FormattedText text={s.post.content} /></p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                         <span><ArrowUp size={12} className="inline" /> {s.post.upvotes - s.post.downvotes}</span>
                         <button
@@ -275,7 +374,7 @@ export function TimelinePage() {
                         <Avatar url={s.message.sender_avatar || ''} type="image" size={20} />
                         <span className="text-xs text-indigo-300">{s.message.sender_name || 'Unknown'}</span>
                       </div>
-                      <p className="text-gray-300 text-sm">{s.message.content}</p>
+                      <p className="text-gray-300 text-sm"><FormattedText text={s.message.content} /></p>
                     </div>
                   )}
                 </GlassPanel>
@@ -291,7 +390,8 @@ export function TimelinePage() {
                   <div className="flex flex-col items-center gap-1">
                     <button
                       onClick={() => handleVote(post.id, 1)}
-                      className={`p-1 rounded hover:bg-white/10 transition-all-custom ${
+                      disabled={votingPosts.has(post.id)}
+                      className={`p-1 rounded hover:bg-white/10 transition-all-custom ${votingPosts.has(post.id) ? 'opacity-50 cursor-not-allowed' : ''} ${
                         post.user_vote === 1 ? 'text-indigo-400' : 'text-gray-500'
                       }`}
                     >
@@ -302,7 +402,8 @@ export function TimelinePage() {
                     </span>
                     <button
                       onClick={() => handleVote(post.id, -1)}
-                      className={`p-1 rounded hover:bg-white/10 transition-all-custom ${
+                      disabled={votingPosts.has(post.id)}
+                      className={`p-1 rounded hover:bg-white/10 transition-all-custom ${votingPosts.has(post.id) ? 'opacity-50 cursor-not-allowed' : ''} ${
                         post.user_vote === -1 ? 'text-red-400' : 'text-gray-500'
                       }`}
                     >
@@ -369,7 +470,8 @@ export function TimelinePage() {
                     ) : (
                       <>
                         <h3 className="text-white font-semibold mb-1">{post.title}</h3>
-                        <p className="text-gray-300 text-sm">{post.content}</p>
+                        <p className="text-gray-300 text-sm"><FormattedText text={post.content} /></p>
+                        {post.media_urls && post.media_urls.length > 0 && <MediaViewer urls={post.media_urls} />}
                       </>
                     )}
 

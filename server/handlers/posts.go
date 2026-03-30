@@ -50,13 +50,42 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 		AuthorAvatar: authorAvatar,
 	}
 
+	// Broadcast new post to all connected users
+	Hub.Broadcast(models.WSMessage{
+		Type:    "new_post",
+		Payload: post,
+	})
+
 	jsonResponse(w, http.StatusCreated, post)
 }
 
 func GetTimeline(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	algorithm := r.URL.Query().Get("algorithm") // "chronological" or "for-you"
 
-	// Get posts from users we have handshakes with, plus our own
+	var posts []models.Post
+	var err error
+
+	if algorithm == "for-you" {
+		posts = getAlgorithmicFeed(userID)
+	} else {
+		posts = getChronologicalFeed(userID)
+	}
+
+	// Fallback: if personal feed is empty, include popular posts from everyone
+	if len(posts) == 0 {
+		posts = getPopularPosts(userID, 20)
+	}
+
+	// Always ensure there's SOMETHING to show - include trending if still empty
+	if len(posts) == 0 {
+		posts = getTrendingPosts(userID, 20)
+	}
+
+	jsonResponse(w, http.StatusOK, posts)
+}
+
+func getChronologicalFeed(userID string) []models.Post {
 	rows, err := db.DB.Query(`SELECT p.id, p.author_id, p.server_id, p.title, p.content, p.media_url, p.upvotes, p.downvotes, p.comment_count, p.created_at, p.edited_at,
 		u.username, u.avatar_url,
 		COALESCE((SELECT vote FROM post_votes WHERE post_id = p.id AND user_id = ?), 0) as user_vote
@@ -70,8 +99,7 @@ func GetTimeline(w http.ResponseWriter, r *http.Request) {
 		ORDER BY p.created_at DESC LIMIT 50`,
 		userID, userID, userID, userID, userID)
 	if err != nil {
-		jsonError(w, "Failed to fetch timeline", http.StatusInternalServerError)
-		return
+		return nil
 	}
 	defer rows.Close()
 
@@ -82,8 +110,97 @@ func GetTimeline(w http.ResponseWriter, r *http.Request) {
 			&p.AuthorName, &p.AuthorAvatar, &p.UserVote)
 		posts = append(posts, p)
 	}
+	return posts
+}
 
-	jsonResponse(w, http.StatusOK, posts)
+func getAlgorithmicFeed(userID string) []models.Post {
+	// Algorithm: score = (upvotes * 2) + (comment_count * 3) + (recency_bonus)
+	// Recency bonus: posts from last 24h get +50, last week +20, last month +5
+	rows, err := db.DB.Query(`SELECT p.id, p.author_id, p.server_id, p.title, p.content, p.media_url, p.upvotes, p.downvotes, p.comment_count, p.created_at, p.edited_at,
+		u.username, u.avatar_url,
+		COALESCE((SELECT vote FROM post_votes WHERE post_id = p.id AND user_id = ?), 0) as user_vote,
+		-- Calculate engagement score
+		((p.upvotes - p.downvotes) * 2 + p.comment_count * 3 +
+		CASE 
+			WHEN p.created_at > datetime('now', '-1 day') THEN 50
+			WHEN p.created_at > datetime('now', '-7 days') THEN 20
+			WHEN p.created_at > datetime('now', '-30 days') THEN 5
+			ELSE 0
+		END) as score
+		FROM posts p
+		JOIN users u ON p.author_id = u.id
+		WHERE p.server_id IS NULL
+		AND (p.author_id = ? OR p.author_id IN (
+			SELECT CASE WHEN initiator_id = ? THEN responder_id ELSE initiator_id END
+			FROM handshakes WHERE (initiator_id = ? OR responder_id = ?) AND status = 'completed'
+		))
+		ORDER BY score DESC, p.created_at DESC LIMIT 50`,
+		userID, userID, userID, userID, userID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	posts := []models.Post{}
+	for rows.Next() {
+		var p models.Post
+		var score int
+		rows.Scan(&p.ID, &p.AuthorID, &p.ServerID, &p.Title, &p.Content, &p.MediaURL, &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.CreatedAt, &p.EditedAt,
+			&p.AuthorName, &p.AuthorAvatar, &p.UserVote, &score)
+		posts = append(posts, p)
+	}
+	return posts
+}
+
+func getPopularPosts(userID string, limit int) []models.Post {
+	// Get most popular posts from everyone (fallback when personal feed is empty)
+	rows, err := db.DB.Query(`SELECT p.id, p.author_id, p.server_id, p.title, p.content, p.media_url, p.upvotes, p.downvotes, p.comment_count, p.created_at, p.edited_at,
+		u.username, u.avatar_url,
+		COALESCE((SELECT vote FROM post_votes WHERE post_id = p.id AND user_id = ?), 0) as user_vote
+		FROM posts p
+		JOIN users u ON p.author_id = u.id
+		WHERE p.server_id IS NULL
+		ORDER BY (p.upvotes - p.downvotes) DESC LIMIT ?`,
+		userID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	posts := []models.Post{}
+	for rows.Next() {
+		var p models.Post
+		rows.Scan(&p.ID, &p.AuthorID, &p.ServerID, &p.Title, &p.Content, &p.MediaURL, &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.CreatedAt, &p.EditedAt,
+			&p.AuthorName, &p.AuthorAvatar, &p.UserVote)
+		posts = append(posts, p)
+	}
+	return posts
+}
+
+func getTrendingPosts(userID string, limit int) []models.Post {
+	// Get recent posts with any engagement (last resort fallback)
+	rows, err := db.DB.Query(`SELECT p.id, p.author_id, p.server_id, p.title, p.content, p.media_url, p.upvotes, p.downvotes, p.comment_count, p.created_at, p.edited_at,
+		u.username, u.avatar_url,
+		COALESCE((SELECT vote FROM post_votes WHERE post_id = p.id AND user_id = ?), 0) as user_vote
+		FROM posts p
+		JOIN users u ON p.author_id = u.id
+		WHERE p.server_id IS NULL
+		AND p.created_at > datetime('now', '-7 days')
+		ORDER BY p.created_at DESC LIMIT ?`,
+		userID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	posts := []models.Post{}
+	for rows.Next() {
+		var p models.Post
+		rows.Scan(&p.ID, &p.AuthorID, &p.ServerID, &p.Title, &p.Content, &p.MediaURL, &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.CreatedAt, &p.EditedAt,
+			&p.AuthorName, &p.AuthorAvatar, &p.UserVote)
+		posts = append(posts, p)
+	}
+	return posts
 }
 
 func GetServerPosts(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +283,18 @@ func VotePost(w http.ResponseWriter, r *http.Request) {
 		addXP(authorID, 2)
 	}
 
+	// Broadcast vote update
+	var upvotes, downvotes int
+	db.DB.QueryRow("SELECT upvotes, downvotes FROM posts WHERE id = ?", postID).Scan(&upvotes, &downvotes)
+	Hub.Broadcast(models.WSMessage{
+		Type: "post_vote_update",
+		Payload: map[string]interface{}{
+			"post_id":   postID,
+			"upvotes":   upvotes,
+			"downvotes": downvotes,
+		},
+	})
+
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "voted"})
 }
 
@@ -223,6 +352,18 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 		Content:    req.Content,
 		AuthorName: authorName,
 	}
+
+	// Broadcast new comment
+	var commentCount int
+	db.DB.QueryRow("SELECT comment_count FROM posts WHERE id = ?", postID).Scan(&commentCount)
+	Hub.Broadcast(models.WSMessage{
+		Type: "post_comment",
+		Payload: map[string]interface{}{
+			"post_id":       postID,
+			"comment":       comment,
+			"comment_count": commentCount,
+		},
+	})
 
 	jsonResponse(w, http.StatusCreated, comment)
 }

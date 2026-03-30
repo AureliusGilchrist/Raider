@@ -68,12 +68,30 @@ export const servers = {
     request<any>('/servers', { method: 'POST', body: JSON.stringify(data) }),
   join: (id: string) => request<any>(`/servers/${id}/join`, { method: 'POST' }),
   leave: (id: string) => request<any>(`/servers/${id}/leave`, { method: 'POST' }),
-  discover: () => request<any[]>('/servers/discover'),
+  discover: (q?: string, sort?: 'popular' | 'relevant') => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (sort) params.set('sort', sort);
+    return request<any[]>(`/servers/discover?${params.toString()}`);
+  },
   channels: (id: string) => request<any[]>(`/servers/${id}/channels`),
   createChannel: (id: string, data: { name: string; type: string }) =>
     request<any>(`/servers/${id}/channels`, { method: 'POST', body: JSON.stringify(data) }),
   members: (id: string) => request<any[]>(`/servers/${id}/members`),
   posts: (id: string) => request<any[]>(`/servers/${id}/posts`),
+  update: (id: string, data: any) => request<any>(`/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) => request<any>(`/servers/${id}`, { method: 'DELETE' }),
+  // Roles
+  roles: (id: string) => request<any[]>(`/servers/${id}/roles`),
+  createRole: (id: string, data: any) => request<any>(`/servers/${id}/roles`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRole: (id: string, roleId: string, data: any) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRole: (id: string, roleId: string) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'DELETE' }),
+  // Server Announcements
+  getAnnouncement: (id: string) => request<any>(`/servers/${id}/announcement`),
+  getAnnouncements: (id: string) => request<any[]>(`/servers/${id}/announcements`),
+  createAnnouncement: (id: string, data: any) => request<any>(`/servers/${id}/announcements`, { method: 'POST', body: JSON.stringify(data) }),
+  updateAnnouncement: (id: string, annId: string, data: any) => request<any>(`/servers/${id}/announcements/${annId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAnnouncement: (id: string, annId: string) => request<any>(`/servers/${id}/announcements/${annId}`, { method: 'DELETE' }),
 };
 
 // Messages
@@ -84,9 +102,25 @@ export const messages = {
   dmList: () => request<any[]>('/messages/dm'),
 };
 
+// Group Chats
+export const groups = {
+  list: () => request<any[]>('/groups'),
+  get: (groupId: string) => request<any>(`/groups/${groupId}`),
+  create: (data: { name: string; members: string[] }) => request<any>('/groups', { method: 'POST', body: JSON.stringify(data) }),
+  addMember: (groupId: string, userId: string) => request<any>(`/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeMember: (groupId: string, userId: string) => request<any>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
+  leave: (groupId: string) => request<any>(`/groups/${groupId}/leave`, { method: 'POST' }),
+  delete: (groupId: string) => request<any>(`/groups/${groupId}`, { method: 'DELETE' }),
+  messages: (groupId: string) => request<any[]>(`/groups/${groupId}/messages`),
+  sendMessage: (groupId: string, content: string) => request<any>(`/groups/${groupId}/messages`, { method: 'POST', body: JSON.stringify({ content, encrypted: false }) }),
+};
+
 // Posts
 export const posts = {
-  timeline: () => request<any[]>('/posts/timeline'),
+  timeline: (algorithm?: 'chronological' | 'for-you') => {
+    const params = algorithm ? `?algorithm=${algorithm}` : '';
+    return request<any[]>(`/posts/timeline${params}`);
+  },
   create: (data: any) => request<any>('/posts', { method: 'POST', body: JSON.stringify(data) }),
   vote: (postId: string, vote: number) =>
     request<any>(`/posts/${postId}/vote`, { method: 'POST', body: JSON.stringify({ vote }) }),

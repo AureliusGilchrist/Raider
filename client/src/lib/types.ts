@@ -18,6 +18,8 @@ export interface User {
   advanced_mode: boolean;
   xp: number;
   level: number;
+  status: string;
+  status_message: string;
   created_at: string;
   last_seen: string;
   is_following?: boolean;
@@ -119,6 +121,12 @@ export interface Message {
   edited_at?: string;
   sender_name?: string;
   sender_avatar?: string;
+  reply_to_id?: string;
+  reply_to?: {
+    id: string;
+    sender_name: string;
+    content: string;
+  };
 }
 
 export interface Post {
@@ -127,7 +135,8 @@ export interface Post {
   server_id?: string;
   title: string;
   content: string;
-  media_url: string;
+  media_url?: string;
+  media_urls?: string[];
   upvotes: number;
   downvotes: number;
   comment_count: number;

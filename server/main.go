@@ -79,6 +79,8 @@ func main() {
 		r.Post("/api/servers", handlers.CreateServer)
 		r.Get("/api/servers/discover", handlers.DiscoverServers)
 		r.Get("/api/servers/{serverID}", handlers.GetServer)
+		r.Put("/api/servers/{serverID}", handlers.UpdateServer)
+		r.Delete("/api/servers/{serverID}", handlers.DeleteServer)
 		r.Post("/api/servers/{serverID}/join", handlers.JoinServer)
 		r.Post("/api/servers/{serverID}/leave", handlers.LeaveServer)
 		r.Get("/api/servers/{serverID}/channels", handlers.GetChannels)
@@ -86,11 +88,60 @@ func main() {
 		r.Get("/api/servers/{serverID}/members", handlers.GetServerMembers)
 		r.Get("/api/servers/{serverID}/posts", handlers.GetServerPosts)
 
+		// Discord-like Roles
+		r.Get("/api/servers/{serverID}/roles", handlers.GetServerRoles)
+		r.Post("/api/servers/{serverID}/roles", handlers.CreateRole)
+		r.Put("/api/servers/{serverID}/roles/{roleID}", handlers.UpdateRole)
+		r.Delete("/api/servers/{serverID}/roles/{roleID}", handlers.DeleteRole)
+		r.Post("/api/servers/{serverID}/members/roles", handlers.AssignRole)
+		r.Delete("/api/servers/{serverID}/members/roles", handlers.RemoveRole)
+		r.Get("/api/servers/{serverID}/members/{userID}/roles", handlers.GetMemberRoles)
+
+		// Discord-like Moderation
+		r.Post("/api/servers/{serverID}/members/{userID}/kick", handlers.KickMember)
+		r.Post("/api/servers/{serverID}/members/{userID}/ban", handlers.BanMember)
+		r.Post("/api/servers/{serverID}/members/{userID}/unban", handlers.UnbanMember)
+		r.Post("/api/servers/{serverID}/members/{userID}/timeout", handlers.TimeoutMember)
+		r.Post("/api/servers/{serverID}/mutes/{muteID}/remove", handlers.RemoveTimeout)
+		r.Get("/api/servers/{serverID}/bans", handlers.GetServerBans)
+		r.Get("/api/servers/{serverID}/audit-logs", handlers.GetAuditLogs)
+
+		// Discord-like Invites
+		r.Post("/api/servers/{serverID}/invites", handlers.CreateInvite)
+		r.Get("/api/servers/{serverID}/invites", handlers.GetServerInvites)
+		r.Delete("/api/invites/{code}", handlers.DeleteInvite)
+		r.Get("/api/invites/{code}", handlers.GetInvite)
+		r.Post("/api/invites/{code}/use", handlers.UseInvite)
+
+		// Discord-like Categories
+		r.Get("/api/servers/{serverID}/categories", handlers.GetCategories)
+		r.Post("/api/servers/{serverID}/categories", handlers.CreateCategory)
+		r.Put("/api/servers/{serverID}/categories/{categoryID}", handlers.UpdateCategory)
+		r.Delete("/api/servers/{serverID}/categories/{categoryID}", handlers.DeleteCategory)
+
+		// Server Announcements
+		r.Get("/api/servers/{serverID}/announcement", handlers.GetServerAnnouncement)
+		r.Get("/api/servers/{serverID}/announcements", handlers.GetServerAnnouncementsHistory)
+		r.Post("/api/servers/{serverID}/announcements", handlers.CreateServerAnnouncement)
+		r.Put("/api/servers/{serverID}/announcements/{announcementID}", handlers.UpdateServerAnnouncement)
+		r.Delete("/api/servers/{serverID}/announcements/{announcementID}", handlers.DeleteServerAnnouncement)
+
 		// Messages
 		r.Post("/api/messages", handlers.SendMessage)
 		r.Get("/api/messages/channel/{channelID}", handlers.GetChannelMessages)
 		r.Get("/api/messages/dm/{userID}", handlers.GetDMMessages)
 		r.Get("/api/messages/dm", handlers.GetDMList)
+
+		// Group Chats (separate from servers and DMs)
+		r.Get("/api/groups", handlers.GetGroupChats)
+		r.Post("/api/groups", handlers.CreateGroupChat)
+		r.Get("/api/groups/{groupID}", handlers.GetGroupChat)
+		r.Post("/api/groups/{groupID}/members", handlers.AddGroupMember)
+		r.Delete("/api/groups/{groupID}/members/{userID}", handlers.RemoveGroupMember)
+		r.Post("/api/groups/{groupID}/leave", handlers.LeaveGroupChat)
+		r.Delete("/api/groups/{groupID}", handlers.DeleteGroupChat)
+		r.Get("/api/groups/{groupID}/messages", handlers.GetGroupMessages)
+		r.Post("/api/groups/{groupID}/messages", handlers.SendGroupMessage)
 
 		// Posts
 		r.Get("/api/posts/timeline", handlers.GetTimeline)

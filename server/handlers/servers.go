@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -270,11 +271,34 @@ func GetServerMembers(w http.ResponseWriter, r *http.Request) {
 
 func DiscoverServers(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	q := r.URL.Query().Get("q")
+	sort := r.URL.Query().Get("sort") // "popular" or "relevant"
 
-	rows, err := db.DB.Query(`SELECT id, name, description, icon_url, owner_id, member_count, allow_sharing, created_at
-		FROM servers
-		WHERE id NOT IN (SELECT server_id FROM server_members WHERE user_id = ?)
-		ORDER BY member_count DESC LIMIT 50`, userID)
+	var rows *sql.Rows
+	var err error
+
+	if q != "" {
+		// Search mode - match name/description, order by member_count for relevance
+		searchTerm := "%" + q + "%"
+		rows, err = db.DB.Query(`SELECT id, name, description, icon_url, owner_id, member_count, allow_sharing, created_at
+			FROM servers
+			WHERE (name LIKE ? OR description LIKE ?)
+			AND id NOT IN (SELECT server_id FROM server_members WHERE user_id = ?)
+			ORDER BY member_count DESC LIMIT 50`, searchTerm, searchTerm, userID)
+	} else if sort == "relevant" {
+		// Relevance - could use more sophisticated scoring later
+		rows, err = db.DB.Query(`SELECT id, name, description, icon_url, owner_id, member_count, allow_sharing, created_at
+			FROM servers
+			WHERE id NOT IN (SELECT server_id FROM server_members WHERE user_id = ?)
+			ORDER BY member_count DESC, created_at DESC LIMIT 50`, userID)
+	} else {
+		// Default: popular (by member_count)
+		rows, err = db.DB.Query(`SELECT id, name, description, icon_url, owner_id, member_count, allow_sharing, created_at
+			FROM servers
+			WHERE id NOT IN (SELECT server_id FROM server_members WHERE user_id = ?)
+			ORDER BY member_count DESC LIMIT 50`, userID)
+	}
+
 	if err != nil {
 		jsonError(w, "Failed to discover servers", http.StatusInternalServerError)
 		return
@@ -289,4 +313,69 @@ func DiscoverServers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, servers)
+}
+
+func UpdateServer(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	serverID := chi.URLParam(r, "serverID")
+
+	// Check if owner
+	var ownerID string
+	err := db.DB.QueryRow("SELECT owner_id FROM servers WHERE id = ?", serverID).Scan(&ownerID)
+	if err != nil {
+		jsonError(w, "Server not found", http.StatusNotFound)
+		return
+	}
+	if ownerID != userID {
+		jsonError(w, "Only owner can update server", http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Name            *string `json:"name"`
+		Description     *string `json:"description"`
+		IconURL         *string `json:"icon_url"`
+		IsPrivate       *bool   `json:"is_private"`
+		AllowSharing    *bool   `json:"allow_sharing"`
+		AntispamEnabled *bool   `json:"antispam_enabled"`
+		SlowmodeSeconds *int    `json:"slowmode_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name != nil {
+		db.DB.Exec("UPDATE servers SET name = ? WHERE id = ?", *req.Name, serverID)
+	}
+	if req.Description != nil {
+		db.DB.Exec("UPDATE servers SET description = ? WHERE id = ?", *req.Description, serverID)
+	}
+	if req.IconURL != nil {
+		db.DB.Exec("UPDATE servers SET icon_url = ? WHERE id = ?", *req.IconURL, serverID)
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func DeleteServer(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	serverID := chi.URLParam(r, "serverID")
+
+	// Check if owner
+	var ownerID string
+	err := db.DB.QueryRow("SELECT owner_id FROM servers WHERE id = ?", serverID).Scan(&ownerID)
+	if err != nil {
+		jsonError(w, "Server not found", http.StatusNotFound)
+		return
+	}
+	if ownerID != userID {
+		jsonError(w, "Only owner can delete server", http.StatusForbidden)
+		return
+	}
+
+	// Delete server and all related data (cascade handles members, channels, etc)
+	db.DB.Exec("DELETE FROM servers WHERE id = ?", serverID)
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

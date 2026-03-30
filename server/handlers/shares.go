@@ -7,6 +7,8 @@ import (
 	"raider/db"
 	"raider/middleware"
 	"raider/models"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func ShareContent(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +253,41 @@ func DeleteShare(w http.ResponseWriter, r *http.Request) {
 
 	db.DB.Exec("DELETE FROM shares WHERE id = ?", req.ShareID)
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func VoteShare(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	shareID := chi.URLParam(r, "shareID")
+
+	var req models.VoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Vote != 1 && req.Vote != -1 {
+		jsonError(w, "Vote must be 1 or -1", http.StatusBadRequest)
+		return
+	}
+
+	// Check existing vote
+	var existingVote int
+	err := db.DB.QueryRow("SELECT vote FROM share_votes WHERE share_id = ? AND user_id = ?", shareID, userID).Scan(&existingVote)
+	if err == nil {
+		if existingVote == req.Vote {
+			db.DB.Exec("DELETE FROM share_votes WHERE share_id = ? AND user_id = ?", shareID, userID)
+			db.DB.Exec("UPDATE shares SET upvotes = upvotes - ? WHERE id = ?", req.Vote, shareID)
+		} else {
+			db.DB.Exec("UPDATE share_votes SET vote = ? WHERE share_id = ? AND user_id = ?", req.Vote, shareID, userID)
+			db.DB.Exec("UPDATE shares SET upvotes = upvotes + ?, downvotes = downvotes + ? WHERE id = ?", 
+				req.Vote, -existingVote, shareID)
+		}
+	} else {
+		db.DB.Exec("INSERT INTO share_votes (share_id, user_id, vote) VALUES (?, ?, ?)", shareID, userID, req.Vote)
+		db.DB.Exec("UPDATE shares SET upvotes = upvotes + ? WHERE id = ?", req.Vote, shareID)
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "voted"})
 }
 
 // resolveShareContent loads the embedded post or message for a share

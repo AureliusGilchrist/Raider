@@ -11,6 +11,7 @@ import { DMListPage } from './routes/app/dm';
 import { DMConversationPage } from './routes/app/dmConversation';
 import { SettingsPage } from './routes/app/settings';
 import { CallPage } from './routes/app/call';
+import { GroupsPage } from './routes/app/groups';
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -68,6 +69,12 @@ const dmConversationRoute = createRoute({
   component: DMConversationPage,
 });
 
+const groupsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/groups',
+  component: GroupsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -89,6 +96,7 @@ const routeTree = rootRoute.addChildren([
     serverRoute,
     dmRoute,
     dmConversationRoute,
+    groupsRoute,
     settingsRoute,
     callRoute,
   ]),

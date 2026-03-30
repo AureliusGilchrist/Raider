@@ -9,6 +9,8 @@ import { useWSStore } from '../../stores/wsStore';
 import type { Message } from '../../lib/types';
 import { Send, ArrowLeft } from 'lucide-react';
 import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
+import { FormattedText } from '../../components/FormattedText';
+import { FormatHelper } from '../../components/FormatHelper';
 
 export function DMConversationPage() {
   const { userId } = useParams({ strict: false }) as { userId: string };
@@ -102,7 +104,7 @@ export function DMConversationPage() {
                     ? `bg-indigo-500/30 border border-indigo-500/20 ${grouped ? 'rounded-lg' : 'rounded-br-md'}`
                     : `glass-light ${grouped ? 'rounded-lg' : 'rounded-bl-md'}`
                 }`}>
-                  <p className="text-sm text-gray-200">{msg.content}</p>
+                  <FormattedText text={msg.content} className="text-sm text-gray-200" />
                   {!grouped && (
                     <span className="text-[10px] text-gray-500 mt-1 block text-right">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -127,6 +129,7 @@ export function DMConversationPage() {
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             className="flex-1"
           />
+          <FormatHelper />
           <button onClick={handleSend} className="btn btn-primary px-3">
             <Send size={16} />
           </button>

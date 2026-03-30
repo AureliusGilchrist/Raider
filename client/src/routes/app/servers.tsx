@@ -7,6 +7,8 @@ import { Plus, Globe, Users, Search } from 'lucide-react';
 
 export function ServersPage() {
   const [myServers, setMyServers] = useState<Server[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'popular' | 'relevant'>('popular');
   const [discover, setDiscover] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'mine' | 'discover'>('mine');
@@ -23,6 +25,12 @@ export function ServersPage() {
       setDiscover(disc || []);
     }).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (tab === 'discover') {
+      serversApi.discover(searchQuery, sortBy).then(setDiscover).catch(() => []);
+    }
+  }, [searchQuery, sortBy, tab]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +88,30 @@ export function ServersPage() {
           <Search size={14} className="inline mr-1.5" /> Discover
         </button>
       </div>
+
+      {/* Search & Sort for Discover tab */}
+      {tab === 'discover' && (
+        <div className="flex gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search servers..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'popular' | 'relevant')}
+            className="text-sm bg-white/10 border border-white/20 rounded-lg px-3 text-gray-300"
+          >
+            <option value="popular">Popular</option>
+            <option value="relevant">Relevant</option>
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center text-gray-400 py-12">Loading...</div>

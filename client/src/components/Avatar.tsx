@@ -22,11 +22,6 @@ export function Avatar({ url, type, size = 40, className = '' }: AvatarProps) {
   }
 
   if (type === 'video' || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mkv') || url.endsWith('.mov')) {
-    // Render video at a higher internal resolution to avoid pixelation at small sizes
-    const minRender = 96;
-    const renderSize = Math.max(size, minRender);
-    const scale = size / renderSize;
-
     return (
       <div
         className={`rounded-full overflow-hidden shrink-0 ${className}`}
@@ -34,12 +29,12 @@ export function Avatar({ url, type, size = 40, className = '' }: AvatarProps) {
       >
         <video
           src={url}
-          className="object-cover pointer-events-none"
+          className="pointer-events-none"
           style={{
-            width: renderSize,
-            height: renderSize,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center',
           }}
           autoPlay
           loop

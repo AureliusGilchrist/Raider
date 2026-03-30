@@ -150,13 +150,13 @@ func GetMe(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := db.DB.QueryRow(`SELECT id, username, email, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level
+		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, status, status_message
 		FROM users WHERE id = ?`, userID).Scan(
 		&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.Bio,
 		&user.AvatarURL, &user.AvatarType, &user.BannerURL, &user.BannerType,
 		&user.Gender, &user.GenderCustom, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
-		&user.XP, &user.Level)
+		&user.XP, &user.Level, &user.Status, &user.StatusMessage)
 	if err != nil {
 		jsonError(w, "User not found", http.StatusNotFound)
 		return
@@ -200,6 +200,12 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.BannerType != nil {
 		db.DB.Exec("UPDATE users SET banner_type = ? WHERE id = ?", *req.BannerType, userID)
+	}
+	if req.Status != nil {
+		db.DB.Exec("UPDATE users SET status = ? WHERE id = ?", *req.Status, userID)
+	}
+	if req.StatusMessage != nil {
+		db.DB.Exec("UPDATE users SET status_message = ? WHERE id = ?", *req.StatusMessage, userID)
 	}
 
 	// Return updated user

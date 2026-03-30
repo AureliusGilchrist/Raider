@@ -19,16 +19,20 @@ var upgrader = websocket.Upgrader{
 }
 
 type WSHub struct {
-	mu          sync.RWMutex
-	connections map[string]*websocket.Conn
-	channels    map[string]map[string]bool
-	calls       map[string]map[string]bool
+	mu            sync.RWMutex
+	connections   map[string]*websocket.Conn
+	channels      map[string]map[string]bool
+	calls         map[string]map[string]bool
+	voiceChannels map[string]map[string]bool
+	groups        map[string]map[string]bool
 }
 
 var Hub = &WSHub{
-	connections: make(map[string]*websocket.Conn),
-	channels:    make(map[string]map[string]bool),
-	calls:       make(map[string]map[string]bool),
+	connections:   make(map[string]*websocket.Conn),
+	channels:      make(map[string]map[string]bool),
+	calls:         make(map[string]map[string]bool),
+	voiceChannels: make(map[string]map[string]bool),
+	groups:        make(map[string]map[string]bool),
 }
 
 func (h *WSHub) SendToUser(userID string, msg models.WSMessage) {
@@ -62,6 +66,24 @@ func (h *WSHub) BroadcastToChannel(channelID string, msg models.WSMessage) {
 func (h *WSHub) BroadcastToCall(callID string, msg models.WSMessage) {
 	h.mu.RLock()
 	users, ok := h.calls[callID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+	data, _ := json.Marshal(msg)
+	for userID := range users {
+		h.mu.RLock()
+		conn, ok := h.connections[userID]
+		h.mu.RUnlock()
+		if ok {
+			conn.WriteMessage(websocket.TextMessage, data)
+		}
+	}
+}
+
+func (h *WSHub) BroadcastToGroup(groupID string, msg models.WSMessage) {
+	h.mu.RLock()
+	users, ok := h.groups[groupID]
 	h.mu.RUnlock()
 	if !ok {
 		return
@@ -120,6 +142,12 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			delete(users, userID)
 			if len(users) == 0 {
 				delete(Hub.channels, chID)
+			}
+		}
+		for gID, users := range Hub.groups {
+			delete(users, userID)
+			if len(users) == 0 {
+				delete(Hub.groups, gID)
 			}
 		}
 		Hub.mu.Unlock()
@@ -228,5 +256,107 @@ func handleWSMessage(userID string, msg models.WSMessage) {
 				},
 			})
 		}
-	}
+
+	case "set_status":
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			status, _ := payload["status"].(string)
+			statusMessage, _ := payload["status_message"].(string)
+
+			// Update DB
+			db.DB.Exec("UPDATE users SET status = ?, status_message = ? WHERE id = ?", status, statusMessage, userID)
+
+			// Get user info for broadcast
+			var username string
+			db.DB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
+
+			// Broadcast to all connected users (status is public)
+			for uid := range Hub.connections {
+				if uid != userID {
+					Hub.SendToUser(uid, models.WSMessage{
+						Type: "status_change",
+						Payload: map[string]interface{}{
+							"user_id":        userID,
+							"username":       username,
+							"status":         status,
+							"status_message": statusMessage,
+						},
+					})
+				}
+			}
+		}
+
+	case "join_voice":
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			channelID, _ := payload["channel_id"].(string)
+			serverID, _ := payload["server_id"].(string)
+			
+			// Track user in voice channel
+			if Hub.voiceChannels[channelID] == nil {
+				Hub.voiceChannels[channelID] = make(map[string]bool)
+			}
+			Hub.voiceChannels[channelID][userID] = true
+			
+			// Broadcast participants to all in channel
+			participants := []string{}
+			for uid := range Hub.voiceChannels[channelID] {
+				participants = append(participants, uid)
+			}
+			for uid := range Hub.voiceChannels[channelID] {
+				Hub.SendToUser(uid, models.WSMessage{
+					Type: "voice_participants",
+					Payload: map[string]interface{}{
+						"channel_id":   channelID,
+						"server_id":    serverID,
+						"participants": participants,
+					},
+				})
+			}
+		}
+
+	case "leave_voice":
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			channelID, _ := payload["channel_id"].(string)
+			
+			if Hub.voiceChannels[channelID] != nil {
+				delete(Hub.voiceChannels[channelID], userID)
+				
+				// Broadcast updated participants
+				participants := []string{}
+				for uid := range Hub.voiceChannels[channelID] {
+					participants = append(participants, uid)
+				}
+				for uid := range Hub.voiceChannels[channelID] {
+					Hub.SendToUser(uid, models.WSMessage{
+						Type: "voice_participants",
+						Payload: map[string]interface{}{
+							"channel_id":   channelID,
+							"participants": participants,
+						},
+					})
+				}
+			}
+		}
+
+	case "join_group":
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			groupID, _ := payload["group_id"].(string)
+			
+			Hub.mu.Lock()
+			if Hub.groups[groupID] == nil {
+				Hub.groups[groupID] = make(map[string]bool)
+			}
+			Hub.groups[groupID][userID] = true
+			Hub.mu.Unlock()
+		}
+
+	case "leave_group":
+		if payload, ok := msg.Payload.(map[string]interface{}); ok {
+			groupID, _ := payload["group_id"].(string)
+			
+			Hub.mu.Lock()
+			if Hub.groups[groupID] != nil {
+				delete(Hub.groups[groupID], userID)
+			}
+			Hub.mu.Unlock()
+		}
 }

@@ -6,8 +6,16 @@ import { servers as serversApi, messages as messagesApi, shares as sharesApi } f
 import { useAuthStore } from '../../stores/authStore';
 import { useWSStore } from '../../stores/wsStore';
 import type { Channel, Message } from '../../lib/types';
-import { Hash, Volume2, Plus, Send, Users, Share2, X } from 'lucide-react';
+import { Hash, Volume2, Plus, Send, Users, Share2, X, Crown, Shield, User, Phone, Settings, Megaphone } from 'lucide-react';
+import { StatusIndicator } from '../../components/StatusIndicator';
 import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
+import { FormattedText } from '../../components/FormattedText';
+import { FormatHelper } from '../../components/FormatHelper';
+import { formatDateDivider, isDifferentDay } from '../../lib/dateUtils';
+import { VoiceChannelPanel } from '../../components/VoiceChannel';
+import { RoleManager } from '../../components/RoleManager';
+import { ServerAnnouncementBanner } from '../../components/ServerAnnouncementBanner';
+import { ServerAnnouncementEditor } from '../../components/ServerAnnouncementEditor';
 
 export function ServerPage() {
   const { serverId } = useParams({ strict: false }) as { serverId: string };
@@ -24,6 +32,11 @@ export function ServerPage() {
   const [newChannelName, setNewChannelName] = useState('');
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [shareComment, setShareComment] = useState('');
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [activeVoiceChannel, setActiveVoiceChannel] = useState<string | null>(null);
+  const [showRoleManager, setShowRoleManager] = useState(false);
+  const [showServerSettings, setShowServerSettings] = useState(false);
+  const [showAnnouncementEditor, setShowAnnouncementEditor] = useState(false);
   const emitTyping = useTypingEmitter({ channelId: activeChannel || undefined });
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevChannelRef = useRef<string | null>(null);
@@ -93,8 +106,15 @@ export function ServerPage() {
   const handleSend = async () => {
     if (!input.trim() || !activeChannel) return;
     try {
-      await messagesApi.send({ content: input, channel_id: activeChannel, server_id: serverId, encrypted: false });
+      await messagesApi.send({
+        content: input,
+        channel_id: activeChannel,
+        server_id: serverId,
+        encrypted: false,
+        reply_to_id: replyTo?.id,
+      });
       setInput('');
+      setReplyTo(null);
     } catch {}
   };
 
@@ -140,7 +160,34 @@ export function ServerPage() {
       {/* Channel sidebar */}
       <div className="w-56 glass-light border-r border-white/10 flex flex-col shrink-0">
         <div className="p-3 border-b border-white/10">
-          <h2 className="text-sm font-bold text-white truncate">{server?.name || 'Loading...'}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white truncate">{server?.name || 'Loading...'}</h2>
+            {server?.owner_id === user?.id && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setShowAnnouncementEditor(true)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all-custom"
+                  title="Post Announcement"
+                >
+                  <Megaphone size={14} />
+                </button>
+                <button
+                  onClick={() => setShowRoleManager(true)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all-custom"
+                  title="Manage Roles"
+                >
+                  <Shield size={14} />
+                </button>
+                <button
+                  onClick={() => setShowServerSettings(true)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-all-custom"
+                  title="Server Settings"
+                >
+                  <Settings size={14} />
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-gray-500 truncate">{server?.description}</p>
         </div>
 
@@ -168,13 +215,22 @@ export function ServerPage() {
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => setActiveChannel(ch.id)}
+              onClick={() => {
+                if (ch.type === 'voice') {
+                  setActiveVoiceChannel(activeVoiceChannel === ch.id ? null : ch.id);
+                } else {
+                  setActiveChannel(ch.id);
+                }
+              }}
               className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-all-custom ${
-                activeChannel === ch.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                (ch.type === 'text' && activeChannel === ch.id) || (ch.type === 'voice' && activeVoiceChannel === ch.id)
+                  ? 'bg-white/15 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
               {ch.type === 'voice' ? <Volume2 size={14} /> : <Hash size={14} />}
               <span className="truncate">{ch.name}</span>
+              {ch.type === 'voice' && <span className="ml-auto text-[10px] text-green-400">●</span>}
             </button>
           ))}
         </div>
@@ -187,6 +243,11 @@ export function ServerPage() {
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col">
+        <ServerAnnouncementBanner
+          serverId={serverId}
+          canEdit={server?.owner_id === user?.id}
+          onEdit={() => setShowAnnouncementEditor(true)}
+        />
         {activeChannel ? (
           <>
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
@@ -199,8 +260,17 @@ export function ServerPage() {
             <div className="flex-1 overflow-y-auto p-4 flex flex-col">
               {msgs.map((msg, i) => {
                 const grouped = shouldGroup(msgs, i);
+                const showDateDivider = i === 0 || isDifferentDay(msg.created_at, msgs[i - 1].created_at);
                 return (
-                  <div key={msg.id} className={`flex items-start gap-3 group hover:bg-white/5 rounded px-2 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`}>
+                  <>
+                    {showDateDivider && (
+                      <div key={`date-${msg.id}`} className="flex items-center gap-4 my-4">
+                        <div className="flex-1 h-px bg-white/10" />
+                        <span className="text-xs text-gray-500 font-medium">{formatDateDivider(msg.created_at)}</span>
+                        <div className="flex-1 h-px bg-white/10" />
+                      </div>
+                    )}
+                    <div key={msg.id} className={`flex items-start gap-3 group hover:bg-white/5 rounded px-2 ${grouped ? 'py-0.5' : 'pt-3 pb-0.5'}`}>
                     {grouped ? (
                       <div className="w-8 shrink-0 flex items-center justify-center">
                         <span className="text-[10px] text-gray-600 opacity-0 group-hover:opacity-100 transition-all-custom">
@@ -217,22 +287,43 @@ export function ServerPage() {
                           <span className="text-xs text-gray-600">{new Date(msg.created_at).toLocaleTimeString()}</span>
                         </div>
                       )}
-                      <p className="text-sm text-gray-200">{msg.content}</p>
+                      <FormattedText text={msg.content} className="text-sm text-gray-200" />
+                      {msg.reply_to && (
+                        <div className="mt-1 pl-2 border-l-2 border-indigo-500/50 text-xs text-gray-400">
+                          <span className="text-indigo-300">Replying to {msg.reply_to.sender_name}:</span> {msg.reply_to.content.slice(0, 50)}...
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={() => setShareMsg(msg.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-green-400 transition-all-custom shrink-0"
-                      title="Share to home"
-                    >
-                      <Share2 size={14} />
-                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all-custom">
+                      <button
+                        onClick={() => setReplyTo(msg)}
+                        className="p-1 text-gray-500 hover:text-indigo-400"
+                        title="Reply"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+                      </button>
+                      <button
+                        onClick={() => setShareMsg(msg.id)}
+                        className="p-1 text-gray-500 hover:text-green-400"
+                        title="Share to home"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                    </div>
                   </div>
+                  </>
                 );
               })}
               <div ref={bottomRef} />
             </div>
 
             <div className="p-3 border-t border-white/10">
+              {replyTo && (
+                <div className="flex items-center justify-between mb-2 px-2 py-1 bg-white/5 rounded text-xs">
+                  <span className="text-gray-400">Replying to <span className="text-indigo-300">{replyTo.sender_name}</span></span>
+                  <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-white"><X size={12} /></button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -242,6 +333,7 @@ export function ServerPage() {
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                   className="flex-1"
                 />
+                <FormatHelper />
                 <button onClick={handleSend} className="btn btn-primary px-3">
                   <Send size={16} />
                 </button>
@@ -255,6 +347,79 @@ export function ServerPage() {
           </div>
         )}
       </div>
+      {/* Members sidebar */}
+      <div className="w-56 glass-light border-l border-white/10 flex flex-col shrink-0">
+        <div className="p-3 border-b border-white/10">
+          <h2 className="text-sm font-semibold text-gray-400">Members</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-4">
+          {/* Group by role */}
+          {['owner', 'admin', 'moderator', 'member'].map((role) => {
+            const roleMembers = members.filter((m) => m.role === role || (role === 'member' && !['owner', 'admin', 'moderator'].includes(m.role)));
+            if (roleMembers.length === 0) return null;
+            return (
+              <div key={role}>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase px-2 mb-1">
+                  {role} — {roleMembers.length}
+                </h3>
+                {roleMembers.map((member) => (
+                  <div key={member.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/5 transition-all-custom">
+                    <div className="relative">
+                      <Avatar url={member.avatar_url || ''} type={member.avatar_type || 'image'} size={28} />
+                      <div className="absolute -bottom-0.5 -right-0.5">
+                        <StatusIndicator status={member.status || 'offline'} statusMessage={member.status_message} size={8} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-200 truncate">{member.display_name || member.username}</p>
+                      {member.status_message && (
+                        <p className="text-[10px] text-gray-500 truncate">{member.status_message}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Voice Channel Panel */}
+      {activeVoiceChannel && (
+        <VoiceChannelPanel
+          channelId={activeVoiceChannel}
+          serverId={serverId}
+          onClose={() => setActiveVoiceChannel(null)}
+        />
+      )}
+
+      {/* Role Manager Modal */}
+      {showRoleManager && (
+        <RoleManager serverId={serverId} onClose={() => setShowRoleManager(false)} />
+      )}
+
+      {/* Server Settings Modal - Placeholder */}
+      {showServerSettings && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass p-6 rounded-xl w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Server Settings</h2>
+              <button onClick={() => setShowServerSettings(false)} className="p-1 hover:bg-white/10 rounded">
+                <X size={20} className="text-gray-400" />
+              </button>
+            </div>
+            <p className="text-gray-400 text-center">Server settings coming soon...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Announcement Editor Modal */}
+      {showAnnouncementEditor && (
+        <ServerAnnouncementEditor
+          serverId={serverId}
+          onClose={() => setShowAnnouncementEditor(false)}
+        />
+      )}
     </div>
   );
 }

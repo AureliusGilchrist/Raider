@@ -25,6 +25,8 @@ type User struct {
 	AdvancedMode        bool      `json:"advanced_mode"`
 	XP                  int       `json:"xp"`
 	Level               int       `json:"level"`
+	Status              string    `json:"status"`
+	StatusMessage       string    `json:"status_message"`
 	CreatedAt           time.Time `json:"created_at"`
 	LastSeen            time.Time `json:"last_seen"`
 }
@@ -111,10 +113,44 @@ type ServerMember struct {
 type Channel struct {
 	ID        string    `json:"id"`
 	ServerID  string    `json:"server_id"`
+	ParentID  *string   `json:"parent_id,omitempty"`
 	Name      string    `json:"name"`
 	Type      string    `json:"type"`
+	Topic     string    `json:"topic"`
 	Position  int       `json:"position"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type ChannelCategory struct {
+	ID        string    `json:"id"`
+	ServerID  string    `json:"server_id"`
+	Name      string    `json:"name"`
+	Position  int       `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ServerRole struct {
+	ID          string    `json:"id"`
+	ServerID    string    `json:"server_id"`
+	Name        string    `json:"name"`
+	Color       string    `json:"color"`
+	Position    int       `json:"position"`
+	Hoist       bool      `json:"hoist"`
+	Mentionable bool      `json:"mentionable"`
+	Permissions int       `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type GroupMessage struct {
+	ID           string     `json:"id"`
+	GroupID      string     `json:"group_id"`
+	SenderID     string     `json:"sender_id"`
+	Content      string     `json:"content"`
+	Encrypted    bool       `json:"encrypted"`
+	CreatedAt    time.Time  `json:"created_at"`
+	EditedAt     *time.Time `json:"edited_at,omitempty"`
+	SenderName   string     `json:"sender_name,omitempty"`
+	SenderAvatar string     `json:"sender_avatar,omitempty"`
 }
 
 type Message struct {
@@ -248,15 +284,17 @@ type HandshakeAcceptRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	DisplayName  *string `json:"display_name,omitempty"`
-	Bio          *string `json:"bio,omitempty"`
-	Gender       *string `json:"gender,omitempty"`
-	GenderCustom *string `json:"gender_custom,omitempty"`
-	Pronouns     *string `json:"pronouns,omitempty"`
-	Languages    *string `json:"languages,omitempty"`
-	AdvancedMode *bool   `json:"advanced_mode,omitempty"`
-	BannerURL    *string `json:"banner_url,omitempty"`
-	BannerType   *string `json:"banner_type,omitempty"`
+	DisplayName   *string `json:"display_name,omitempty"`
+	Bio           *string `json:"bio,omitempty"`
+	Gender        *string `json:"gender,omitempty"`
+	GenderCustom  *string `json:"gender_custom,omitempty"`
+	Pronouns      *string `json:"pronouns,omitempty"`
+	Languages     *string `json:"languages,omitempty"`
+	AdvancedMode  *bool   `json:"advanced_mode,omitempty"`
+	BannerURL     *string `json:"banner_url,omitempty"`
+	BannerType    *string `json:"banner_type,omitempty"`
+	Status        *string `json:"status,omitempty"`
+	StatusMessage *string `json:"status_message,omitempty"`
 }
 
 type VoteRequest struct {
