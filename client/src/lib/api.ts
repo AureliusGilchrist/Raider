@@ -92,6 +92,9 @@ export const servers = {
   createAnnouncement: (id: string, data: any) => request<any>(`/servers/${id}/announcements`, { method: 'POST', body: JSON.stringify(data) }),
   updateAnnouncement: (id: string, annId: string, data: any) => request<any>(`/servers/${id}/announcements/${annId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAnnouncement: (id: string, annId: string) => request<any>(`/servers/${id}/announcements/${annId}`, { method: 'DELETE' }),
+  // Server Settings
+  getSettings: (id: string) => request<any>(`/servers/${id}/settings`),
+  updateSettings: (id: string, data: any) => request<any>(`/servers/${id}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // Messages

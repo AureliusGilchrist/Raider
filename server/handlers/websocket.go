@@ -359,4 +359,5 @@ func handleWSMessage(userID string, msg models.WSMessage) {
 			}
 			Hub.mu.Unlock()
 		}
+	}
 }
