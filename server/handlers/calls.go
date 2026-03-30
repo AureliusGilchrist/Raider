@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"raider/db"
 	"raider/middleware"
@@ -15,18 +16,21 @@ func CreateCall(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 
 	var req struct {
-		ServerID  *string `json:"server_id"`
-		ChannelID *string `json:"channel_id"`
-		TargetID  *string `json:"target_id"`
+		ServerID    *string  `json:"server_id"`
+		ChannelID   *string  `json:"channel_id"`
+		TargetID    *string  `json:"target_id"`
+		RingTargets []string `json:"ring_targets"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	ringTargetsJSON, _ := json.Marshal(req.RingTargets)
+
 	callID := generateID()
-	_, err := db.DB.Exec(`INSERT INTO call_sessions (id, creator_id, server_id, channel_id) VALUES (?, ?, ?, ?)`,
-		callID, userID, req.ServerID, req.ChannelID)
+	_, err := db.DB.Exec(`INSERT INTO call_sessions (id, creator_id, server_id, channel_id, ring_targets) VALUES (?, ?, ?, ?, ?)`,
+		callID, userID, req.ServerID, req.ChannelID, string(ringTargetsJSON))
 	if err != nil {
 		jsonError(w, "Failed to create call", http.StatusInternalServerError)
 		return
@@ -37,20 +41,66 @@ func CreateCall(w http.ResponseWriter, r *http.Request) {
 	db.DB.Exec("UPDATE user_stats SET calls_joined = calls_joined + 1 WHERE user_id = ?", userID)
 	addXP(userID, 5)
 
+	// Fetch creator display name for the incoming_call notification
+	var creatorName string
+	db.DB.QueryRow(
+		`SELECT COALESCE(NULLIF(display_name,''), username) FROM users WHERE id = ?`, userID,
+	).Scan(&creatorName)
+
 	call := models.CallSession{
-		ID:        callID,
-		CreatorID: userID,
-		ServerID:  req.ServerID,
-		ChannelID: req.ChannelID,
-		Active:    true,
+		ID:          callID,
+		CreatorID:   userID,
+		ServerID:    req.ServerID,
+		ChannelID:   req.ChannelID,
+		RingTargets: req.RingTargets,
+		Active:      true,
 	}
 
-	// Notify target user if DM call
+	// Notification payload includes the creator's name so the recipient can display it
+	notifPayload := map[string]interface{}{
+		"id":           callID,
+		"creator_id":   userID,
+		"creator_name": creatorName,
+		"server_id":    req.ServerID,
+		"channel_id":   req.ChannelID,
+		"active":       true,
+	}
+
+	// Notify target user(s) for DM or selected group members
 	if req.TargetID != nil {
+		// DM call – ring the single target
 		Hub.SendToUser(*req.TargetID, models.WSMessage{
 			Type:    "incoming_call",
-			Payload: call,
+			Payload: notifPayload,
 		})
+	} else if len(req.RingTargets) > 0 {
+		// Group call with explicit ring targets – only ring selected users
+		for _, targetID := range req.RingTargets {
+			if targetID != userID {
+				Hub.SendToUser(targetID, models.WSMessage{
+					Type:    "incoming_call",
+					Payload: notifPayload,
+				})
+			}
+		}
+	} else if req.ServerID != nil && req.ChannelID != nil {
+		// Group/channel call with no explicit ring targets – ring all server members
+		rows, err := db.DB.Query(
+			`SELECT user_id FROM server_members WHERE server_id = ? AND user_id != ?`,
+			req.ServerID, userID,
+		)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var memberID string
+				if rows.Scan(&memberID) == nil {
+					Hub.SendToUser(memberID, models.WSMessage{
+						Type:    "incoming_call",
+						Payload: notifPayload,
+					})
+				}
+			}
+		}
 	}
 
 	jsonResponse(w, http.StatusCreated, call)
@@ -194,14 +244,32 @@ func SignalWebRTC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Relay signal to target, stripping any IP info from ICE candidates
+	// For ICE candidates, strip host and srflx candidates to prevent IP leakage.
+	// Only relay-type candidates (from a TURN server) are forwarded.
+	// If no TURN server is configured, all candidates are dropped here to avoid exposing IPs.
+	filteredData := signal.Data
+	if signal.Type == "ice-candidate" {
+		if candidateMap, ok := signal.Data.(map[string]interface{}); ok {
+			candidate, _ := candidateMap["candidate"].(string)
+			// Drop host (direct IP) and srflx (server-reflexive / public IP) candidates.
+			// Only forward relay candidates sourced from a TURN server.
+			if strings.Contains(candidate, " host ") || strings.Contains(candidate, " srflx ") {
+				// Silently drop to prevent IP leakage
+				jsonResponse(w, http.StatusOK, map[string]string{"status": "dropped"})
+				return
+			}
+			filteredData = candidateMap
+		}
+	}
+
+	// Relay signal to target user
 	Hub.SendToUser(signal.TargetID, models.WSMessage{
 		Type: "webrtc_signal",
 		Payload: map[string]interface{}{
 			"from":    userID,
 			"call_id": signal.CallID,
 			"type":    signal.Type,
-			"data":    signal.Data,
+			"data":    filteredData,
 		},
 	})
 

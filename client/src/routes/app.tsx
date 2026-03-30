@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate } from '@tanstack/react-router';
 import { useAuthStore } from '../stores/authStore';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Avatar } from '../components/Avatar';
+import { IncomingCallModal } from '../components/IncomingCallModal';
 import {
   Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ export function AppLayout() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <AnnouncementBanner />
+      <IncomingCallModal />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

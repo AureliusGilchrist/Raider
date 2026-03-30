@@ -210,6 +210,20 @@ export function SettingsPage() {
               <Toggle checked={settings.notification_servers} onChange={(v) => update({ notification_servers: v })} label="Server notifications" />
               <Toggle checked={settings.notification_calls} onChange={(v) => update({ notification_calls: v })} label="Call notifications" />
               <Toggle checked={settings.notification_sounds} onChange={(v) => update({ notification_sounds: v })} label="Notification sounds" />
+              <div className="mt-4">
+                <label className="text-sm text-gray-400 mb-1 block">Ringtone</label>
+                <select
+                  value={settings.ringtone || 'default'}
+                  onChange={(e) => update({ ringtone: e.target.value })}
+                  className="w-full"
+                >
+                  <option value="default">Default</option>
+                  <option value="gentle">Gentle</option>
+                  <option value="classic">Classic</option>
+                  <option value="pulse">Pulse</option>
+                  <option value="chime">Chime</option>
+                </select>
+              </div>
             </GlassPanel>
           )}
 
