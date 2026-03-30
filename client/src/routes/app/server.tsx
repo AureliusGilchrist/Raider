@@ -16,6 +16,7 @@ import { VoiceChannelPanel } from '../../components/VoiceChannel';
 import { RoleManager } from '../../components/RoleManager';
 import { ServerAnnouncementBanner } from '../../components/ServerAnnouncementBanner';
 import { ServerAnnouncementEditor } from '../../components/ServerAnnouncementEditor';
+import { ServerSettingsPanel } from '../../components/ServerSettingsPanel';
 
 export function ServerPage() {
   const { serverId } = useParams({ strict: false }) as { serverId: string };
@@ -398,19 +399,9 @@ export function ServerPage() {
         <RoleManager serverId={serverId} onClose={() => setShowRoleManager(false)} />
       )}
 
-      {/* Server Settings Modal - Placeholder */}
+      {/* Server Settings Modal */}
       {showServerSettings && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass p-6 rounded-xl w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">Server Settings</h2>
-              <button onClick={() => setShowServerSettings(false)} className="p-1 hover:bg-white/10 rounded">
-                <X size={20} className="text-gray-400" />
-              </button>
-            </div>
-            <p className="text-gray-400 text-center">Server settings coming soon...</p>
-          </div>
-        </div>
+        <ServerSettingsPanel serverId={serverId} onClose={() => setShowServerSettings(false)} />
       )}
 
       {/* Announcement Editor Modal */}

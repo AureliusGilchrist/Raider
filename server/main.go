@@ -88,6 +88,10 @@ func main() {
 		r.Get("/api/servers/{serverID}/members", handlers.GetServerMembers)
 		r.Get("/api/servers/{serverID}/posts", handlers.GetServerPosts)
 
+		// Server Settings
+		r.Get("/api/servers/{serverID}/settings", handlers.GetServerSettings)
+		r.Put("/api/servers/{serverID}/settings", handlers.UpdateServerSettings)
+
 		// Discord-like Roles
 		r.Get("/api/servers/{serverID}/roles", handlers.GetServerRoles)
 		r.Post("/api/servers/{serverID}/roles", handlers.CreateRole)

@@ -330,6 +330,28 @@ type Share struct {
 	Message         *Message  `json:"message,omitempty"`
 }
 
+type ServerSettings struct {
+	ServerID                    string `json:"server_id"`
+	AFKChannelID                string `json:"afk_channel_id"`
+	AFKTimeout                  int    `json:"afk_timeout"`
+	SystemChannelID             string `json:"system_channel_id"`
+	SystemChannelFlags          int    `json:"system_channel_flags"`
+	DefaultMessageNotifications int    `json:"default_message_notifications"`
+	VerificationLevel           int    `json:"verification_level"`
+	ExplicitContentFilter       int    `json:"explicit_content_filter"`
+	MFALevel                    int    `json:"mfa_level"`
+	WidgetEnabled               bool   `json:"widget_enabled"`
+	WidgetChannelID             string `json:"widget_channel_id"`
+	CommunityEnabled            bool   `json:"community_enabled"`
+	RulesChannelID              string `json:"rules_channel_id"`
+	PublicUpdatesChannelID      string `json:"public_updates_channel_id"`
+	WelcomeScreenEnabled        bool   `json:"welcome_screen_enabled"`
+	WelcomeScreenDescription    string `json:"welcome_screen_description"`
+	SplashURL                   string `json:"splash_url"`
+	BannerURL                   string `json:"banner_url"`
+	DiscoverySplashURL          string `json:"discovery_splash_url"`
+}
+
 type WSMessage struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`

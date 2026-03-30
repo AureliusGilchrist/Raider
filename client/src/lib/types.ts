@@ -216,6 +216,28 @@ export interface Announcement {
   expires_at?: string;
 }
 
+export interface ServerSettings {
+  server_id: string;
+  afk_channel_id: string;
+  afk_timeout: number;
+  system_channel_id: string;
+  system_channel_flags: number;
+  default_message_notifications: number;
+  verification_level: number;
+  explicit_content_filter: number;
+  mfa_level: number;
+  widget_enabled: boolean;
+  widget_channel_id: string;
+  community_enabled: boolean;
+  rules_channel_id: string;
+  public_updates_channel_id: string;
+  welcome_screen_enabled: boolean;
+  welcome_screen_description: string;
+  splash_url: string;
+  banner_url: string;
+  discovery_splash_url: string;
+}
+
 export interface WSMessage {
   type: string;
   payload: any;
