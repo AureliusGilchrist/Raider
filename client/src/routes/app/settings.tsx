@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -9,13 +10,16 @@ import {
   User, Shield, Palette, Bell, Eye, Monitor, Save, X, Headphones,
 } from 'lucide-react';
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-sm text-gray-300">{label}</span>
+    <div className="flex items-start justify-between py-2.5 gap-4">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm text-gray-300 block">{label}</span>
+        {description && <span className="text-xs text-gray-500 mt-0.5 block">{description}</span>}
+      </div>
       <button
         onClick={() => onChange(!checked)}
-        className={`w-10 h-5 rounded-full transition-all-custom relative ${checked ? 'bg-indigo-500' : 'bg-gray-600'}`}
+        className={`w-10 h-5 rounded-full transition-all-custom relative shrink-0 mt-0.5 ${checked ? 'bg-indigo-500' : 'bg-gray-600'}`}
       >
         <div
           className="w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all-custom"
@@ -26,39 +30,24 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-const COLOR_SCHEMES = [
-  { id: 'default', name: 'Default', colors: ['#6366f1', '#8b5cf6', '#a855f7'] },
-  { id: 'ocean', name: 'Ocean', colors: ['#0ea5e9', '#0284c7', '#0369a1'] },
-  { id: 'sunset', name: 'Sunset', colors: ['#f97316', '#ef4444', '#dc2626'] },
-  { id: 'forest', name: 'Forest', colors: ['#22c55e', '#16a34a', '#15803d'] },
-  { id: 'rose', name: 'Rose', colors: ['#f43f5e', '#e11d48', '#be123c'] },
-  { id: 'amber', name: 'Amber', colors: ['#f59e0b', '#d97706', '#b45309'] },
-  { id: 'teal', name: 'Teal', colors: ['#14b8a6', '#0d9488', '#0f766e'] },
-  { id: 'violet', name: 'Violet', colors: ['#8b5cf6', '#7c3aed', '#6d28d9'] },
-  { id: 'sky', name: 'Sky', colors: ['#38bdf8', '#0ea5e9', '#0284c7'] },
-  { id: 'crimson', name: 'Crimson', colors: ['#dc2626', '#b91c1c', '#991b1b'] },
-  { id: 'emerald', name: 'Emerald', colors: ['#10b981', '#059669', '#047857'] },
-  { id: 'fuchsia', name: 'Fuchsia', colors: ['#d946ef', '#c026d3', '#a21caf'] },
-  { id: 'lime', name: 'Lime', colors: ['#84cc16', '#65a30d', '#4d7c0f'] },
-  { id: 'cyan', name: 'Cyan', colors: ['#06b6d4', '#0891b2', '#0e7490'] },
-  { id: 'pink', name: 'Pink', colors: ['#ec4899', '#db2777', '#be185d'] },
-  { id: 'indigo', name: 'Indigo', colors: ['#6366f1', '#4f46e5', '#4338ca'] },
-  { id: 'slate', name: 'Slate', colors: ['#64748b', '#475569', '#334155'] },
-  { id: 'gold', name: 'Gold', colors: ['#eab308', '#ca8a04', '#a16207'] },
-  { id: 'arctic', name: 'Arctic', colors: ['#67e8f9', '#22d3ee', '#06b6d4'] },
-  { id: 'lavender', name: 'Lavender', colors: ['#a78bfa', '#8b5cf6', '#7c3aed'] },
-  { id: 'coral', name: 'Coral', colors: ['#fb7185', '#f43f5e', '#e11d48'] },
-  { id: 'mint', name: 'Mint', colors: ['#34d399', '#10b981', '#059669'] },
-  { id: 'midnight', name: 'Midnight', colors: ['#312e81', '#1e1b4b', '#0f0a3c'] },
-  { id: 'bronze', name: 'Bronze', colors: ['#b87333', '#a0522d', '#8b4513'] },
-  { id: 'neon', name: 'Neon', colors: ['#39ff14', '#00ff87', '#00e5ff'] },
-  { id: 'space', name: '🚀 Space', colors: ['#0b0d21', '#1a0a2e', '#0d1b3e'] },
-  { id: 'ocean', name: '🌊 Ocean', colors: ['#0a192f', '#006994', '#004d7a'] },
-  { id: 'aurora', name: '🌌 Aurora', colors: ['#0a0a1a', '#00ff80', '#00c8ff'] },
-  { id: 'lava', name: '🌋 Lava', colors: ['#1a0a0a', '#ff4500', '#dc143c'] },
-  { id: 'matrix', name: '💻 Matrix', colors: ['#0a0a0a', '#005000', '#00ff00'] },
-  { id: 'sakura', name: '🌸 Sakura', colors: ['#1a0f1f', '#ffb6c1', '#ff69b4'] },
+const BASIC_SCHEMES = [
+  { id: 'default',  name: 'Default',  colors: ['#0d0c2e', '#1a0e45', '#130530'] },
+  { id: 'sunset',   name: 'Sunset',   colors: ['#1c0500', '#280800', '#1a0400'] },
+  { id: 'midnight', name: 'Midnight', colors: ['#050418', '#080730', '#06051f'] },
+  { id: 'neon',     name: 'Neon',     colors: ['#010a04', '#001a08', '#000d10'] },
 ] as const;
+
+const SPECIAL_SCHEMES = [
+  { id: 'space',      name: '🚀 Space',      colors: ['#0b0d21', '#1a0a2e', '#0d1b3e'] },
+  { id: 'ocean',      name: '🌊 Ocean',      colors: ['#0a192f', '#006994', '#004d7a'] },
+  { id: 'deep_sea',   name: '🦑 Deep Sea',   colors: ['#010a14', '#002040', '#003060'] },
+  { id: 'aurora',     name: '🌌 Aurora',     colors: ['#0a0a1a', '#00ff80', '#00c8ff'] },
+  { id: 'matrix',     name: '💻 Matrix',     colors: ['#0a0a0a', '#005000', '#00ff00'] },
+  { id: 'sakura',     name: '🌸 Sakura',     colors: ['#1a0f1f', '#ffb6c1', '#ff69b4'] },
+  { id: 'black_hole', name: '🕳️ Black Hole', colors: ['#000000', '#0a0005', '#050010'] },
+] as const;
+
+const COLOR_SCHEMES = [...BASIC_SCHEMES, ...SPECIAL_SCHEMES];
 
 function AudioSettings() {
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -230,7 +219,9 @@ function AudioSettings() {
 export function SettingsPage() {
   const { settings, fetch: fetchSettings, update } = useSettingsStore();
   const { user, setUser } = useAuthStore();
-  const [tab, setTab] = useState('profile');
+  const { tab: urlTab } = useParams({ strict: false }) as { tab?: string };
+  const tab = urlTab ?? 'profile';
+  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [gender, setGender] = useState('');
@@ -243,6 +234,18 @@ export function SettingsPage() {
   const [twoFACode, setTwoFACode] = useState('');
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFAError, setTwoFAError] = useState('');
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('raider_light_mode') === 'true');
+
+  const toggleLightMode = (v: boolean) => {
+    setLightMode(v);
+    localStorage.setItem('raider_light_mode', String(v));
+    document.body.classList.toggle('light-mode', v);
+  };
+
+  // Apply light mode on mount
+  useEffect(() => {
+    document.body.classList.toggle('light-mode', lightMode);
+  }, []);
 
   useEffect(() => { fetchSettings(); }, []);
 
@@ -293,7 +296,7 @@ export function SettingsPage() {
             {tabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => navigate({ to: '/app/settings/$tab', params: { tab: t.id } })}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all-custom ${
                   tab === t.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
@@ -326,12 +329,16 @@ export function SettingsPage() {
                     {genderOptions.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
-                {gender === 'Custom' && (
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">Custom Gender</label>
-                    <input type="text" value={genderCustom} onChange={(e) => setGenderCustom(e.target.value)} className="w-full" />
-                  </div>
-                )}
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Custom gender description</label>
+                  <input
+                    type="text"
+                    placeholder="Describe your gender freely…"
+                    value={genderCustom}
+                    onChange={(e) => setGenderCustom(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">Pronouns</label>
                   <select value={pronouns} onChange={(e) => setPronouns(e.target.value)} className="w-full">
@@ -351,6 +358,27 @@ export function SettingsPage() {
                       </span>
                     ))}
                   </div>
+                  <input
+                    type="text"
+                    placeholder="Type languages, comma-separated (e.g. English, French)…"
+                    className="w-full mb-2"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        const val = (e.target as HTMLInputElement).value.replace(/,$/, '').trim();
+                        if (val && !languages.includes(val)) setLanguages([...languages, val]);
+                        (e.target as HTMLInputElement).value = '';
+                        e.preventDefault();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (!val) return;
+                      const typed = val.split(',').map(l => l.trim()).filter(Boolean);
+                      const toAdd = typed.filter(l => !languages.includes(l));
+                      if (toAdd.length) setLanguages([...languages, ...toAdd]);
+                      e.target.value = '';
+                    }}
+                  />
                   <select
                     value=""
                     onChange={(e) => {
@@ -360,7 +388,7 @@ export function SettingsPage() {
                     }}
                     className="w-full"
                   >
-                    <option value="">Add a language...</option>
+                    <option value="">Or pick from list…</option>
                     {LANGUAGE_OPTIONS.filter(l => !languages.includes(l)).map((l) => (
                       <option key={l} value={l}>{l}</option>
                     ))}
@@ -394,6 +422,8 @@ export function SettingsPage() {
           {tab === 'appearance' && settings && (
             <GlassPanel className="p-6 animate-fade-in">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Palette size={18} /> Appearance</h2>
+              <Toggle checked={lightMode} onChange={toggleLightMode} label="Light mode" description="Switch to a lighter color scheme for the UI" />
+              <div className="border-t border-white/10 my-3" />
               <Toggle checked={settings.glass_effect} onChange={(v) => update({ glass_effect: v })} label="Glass effect (blur)" />
               <Toggle checked={settings.gradient_bg} onChange={(v) => update({ gradient_bg: v })} label="Gradient background" />
               {settings.gradient_bg && (
@@ -437,8 +467,11 @@ export function SettingsPage() {
               <Toggle checked={settings.high_contrast} onChange={(v) => update({ high_contrast: v })} label="High contrast" />
               <div className="mt-4">
                 <label className="text-sm text-gray-400 mb-2 block">Color Scheme</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {COLOR_SCHEMES.map((scheme) => (
+
+                {/* Basic presets */}
+                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">Basic</p>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {BASIC_SCHEMES.map((scheme) => (
                     <button
                       key={scheme.id}
                       onClick={() => {
@@ -457,11 +490,37 @@ export function SettingsPage() {
                     >
                       <div className="flex gap-0.5">
                         {scheme.colors.map((c, i) => (
-                          <div
-                            key={i}
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: c }}
-                          />
+                          <div key={i} className="w-4 h-4 rounded-full" style={{ backgroundColor: c }} />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-gray-400 truncate w-full text-center">{scheme.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Animated special themes */}
+                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">✨ Special</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {SPECIAL_SCHEMES.map((scheme) => (
+                    <button
+                      key={scheme.id}
+                      onClick={() => {
+                        update({
+                          color_scheme: scheme.id,
+                          gradient_color1: scheme.colors[0],
+                          gradient_color2: scheme.colors[1],
+                          gradient_color3: scheme.colors[2],
+                          accent_color: scheme.colors[0],
+                        });
+                      }}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all-custom ${
+                        settings.color_scheme === scheme.id ? 'bg-white/20 ring-2 ring-white/40' : 'hover:bg-white/10'
+                      }`}
+                      title={scheme.name}
+                    >
+                      <div className="flex gap-0.5">
+                        {scheme.colors.map((c, i) => (
+                          <div key={i} className="w-4 h-4 rounded-full" style={{ backgroundColor: c }} />
                         ))}
                       </div>
                       <span className="text-[10px] text-gray-400 truncate w-full text-center">{scheme.name}</span>
@@ -476,23 +535,45 @@ export function SettingsPage() {
           {tab === 'notifications' && settings && (
             <GlassPanel className="p-6 animate-fade-in">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Bell size={18} /> Notifications</h2>
-              <Toggle checked={settings.notification_dms} onChange={(v) => update({ notification_dms: v })} label="DM notifications" />
-              <Toggle checked={settings.notification_servers} onChange={(v) => update({ notification_servers: v })} label="Server notifications" />
-              <Toggle checked={settings.notification_calls} onChange={(v) => update({ notification_calls: v })} label="Call notifications" />
-              <Toggle checked={settings.notification_sounds} onChange={(v) => update({ notification_sounds: v })} label="Notification sounds" />
-              <div className="mt-4">
-                <label className="text-sm text-gray-400 mb-1 block">Ringtone</label>
-                <select
-                  value={settings.ringtone || 'default'}
-                  onChange={(e) => update({ ringtone: e.target.value })}
-                  className="w-full"
-                >
-                  <option value="default">Default</option>
-                  <option value="gentle">Gentle</option>
-                  <option value="classic">Classic</option>
-                  <option value="pulse">Pulse</option>
-                  <option value="chime">Chime</option>
-                </select>
+
+              <div className="mb-5">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Messages</h3>
+                <Toggle checked={settings.notification_dms} onChange={(v) => update({ notification_dms: v })} label="Direct messages" description="Notify when someone sends you a DM" />
+                <Toggle checked={settings.notification_group_messages ?? true} onChange={(v) => update({ notification_group_messages: v })} label="Group messages" description="Notify for new group chat messages" />
+                <Toggle checked={settings.notification_servers} onChange={(v) => update({ notification_servers: v })} label="Server messages" description="Notify for server channel activity" />
+                <Toggle checked={settings.notification_mentions ?? true} onChange={(v) => update({ notification_mentions: v })} label="Mentions" description="Notify when someone @mentions you" />
+              </div>
+
+              <div className="mb-5 border-t border-white/10 pt-5">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Social</h3>
+                <Toggle checked={settings.notification_follows ?? true} onChange={(v) => update({ notification_follows: v })} label="New followers" description="Notify when someone follows you" />
+                <Toggle checked={settings.notification_handshakes ?? true} onChange={(v) => update({ notification_handshakes: v })} label="Handshake requests" description="Notify when someone requests a handshake" />
+                <Toggle checked={settings.notification_comments ?? true} onChange={(v) => update({ notification_comments: v })} label="Comments & replies" description="Notify when someone comments on your posts or replies to you" />
+                <Toggle checked={settings.notification_post_votes ?? false} onChange={(v) => update({ notification_post_votes: v })} label="Post votes" description="Notify when someone votes on your posts" />
+              </div>
+
+              <div className="mb-5 border-t border-white/10 pt-5">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Calls</h3>
+                <Toggle checked={settings.notification_calls} onChange={(v) => update({ notification_calls: v })} label="Incoming calls" description="Notify for incoming voice/video calls" />
+              </div>
+
+              <div className="border-t border-white/10 pt-5">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Sound</h3>
+                <Toggle checked={settings.notification_sounds} onChange={(v) => update({ notification_sounds: v })} label="Notification sounds" description="Play a sound for notifications" />
+                <div className="mt-3">
+                  <label className="text-sm text-gray-400 mb-1 block">Ringtone</label>
+                  <select
+                    value={settings.ringtone || 'default'}
+                    onChange={(e) => update({ ringtone: e.target.value })}
+                    className="w-full"
+                  >
+                    <option value="default">Default</option>
+                    <option value="gentle">Gentle</option>
+                    <option value="classic">Classic</option>
+                    <option value="pulse">Pulse</option>
+                    <option value="chime">Chime</option>
+                  </select>
+                </div>
               </div>
             </GlassPanel>
           )}

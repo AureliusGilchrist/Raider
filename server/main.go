@@ -61,6 +61,7 @@ func main() {
 		r.Put("/api/me", handlers.UpdateProfile)
 		r.Get("/api/profile", handlers.GetProfile)
 		r.Get("/api/users/search", handlers.SearchUsers)
+		r.Get("/api/users/{userID}/activity", handlers.GetUserActivity)
 
 		// Settings
 		r.Get("/api/settings", handlers.GetSettings)
@@ -147,6 +148,9 @@ func main() {
 		r.Get("/api/messages/channel/{channelID}", handlers.GetChannelMessages)
 		r.Get("/api/messages/dm/{userID}", handlers.GetDMMessages)
 		r.Get("/api/messages/dm", handlers.GetDMList)
+		r.Patch("/api/messages/{id}", handlers.EditMessage)
+		r.Delete("/api/messages/{id}", handlers.DeleteMessage)
+		r.Delete("/api/servers/{serverID}/purge/{userID}", handlers.PurgeUserMessages)
 
 		// Group Chats (separate from servers and DMs)
 		r.Get("/api/groups", handlers.GetGroupChats)
@@ -158,6 +162,8 @@ func main() {
 		r.Delete("/api/groups/{groupID}", handlers.DeleteGroupChat)
 		r.Get("/api/groups/{groupID}/messages", handlers.GetGroupMessages)
 		r.Post("/api/groups/{groupID}/messages", handlers.SendGroupMessage)
+		r.Patch("/api/groups/{groupID}/messages/{id}", handlers.EditGroupMessage)
+		r.Delete("/api/groups/{groupID}/messages/{id}", handlers.DeleteGroupMessage)
 
 		// Posts
 		r.Get("/api/posts/timeline", handlers.GetTimeline)
@@ -167,6 +173,9 @@ func main() {
 		r.Post("/api/posts/{postID}/vote", handlers.VotePost)
 		r.Get("/api/posts/{postID}/comments", handlers.GetComments)
 		r.Post("/api/posts/{postID}/comments", handlers.CreateComment)
+		r.Patch("/api/posts/{postID}/comments/{commentID}", handlers.EditComment)
+		r.Delete("/api/posts/{postID}/comments/{commentID}", handlers.DeleteComment)
+		r.Post("/api/posts/{postID}/comments/{commentID}/vote", handlers.VoteComment)
 
 		// Calls
 		r.Post("/api/calls", handlers.CreateCall)
@@ -195,6 +204,14 @@ func main() {
 		r.Post("/api/announcements", handlers.CreateAnnouncement)
 		r.Post("/api/announcements/{id}/dismiss", handlers.DismissAnnouncement)
 		r.Delete("/api/announcements/{id}", handlers.DeleteAnnouncement)
+
+		// Notifications
+		r.Get("/api/notifications", handlers.GetNotifications)
+		r.Get("/api/notifications/unread-count", handlers.GetUnreadNotificationCount)
+		r.Post("/api/notifications/read-all", handlers.MarkAllNotificationsRead)
+		r.Delete("/api/notifications", handlers.ClearAllNotifications)
+		r.Patch("/api/notifications/{id}/read", handlers.MarkNotificationRead)
+		r.Delete("/api/notifications/{id}", handlers.DeleteNotification)
 	})
 
 	port := os.Getenv("PORT")

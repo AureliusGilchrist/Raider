@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"raider/db"
 	"raider/middleware"
@@ -61,6 +62,12 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 	} else if req.RecipientID != nil {
 		Hub.SendToUser(*req.RecipientID, models.WSMessage{Type: "new_message", Payload: msg})
 		Hub.SendToUser(userID, models.WSMessage{Type: "new_message", Payload: msg})
+		// Notify the recipient
+		preview := req.Content
+		if len(preview) > 60 {
+			preview = preview[:60] + "…"
+		}
+		CreateNotification(*req.RecipientID, "dm", "New message from "+senderName, preview, "/app/dm/"+userID)
 	}
 
 	jsonResponse(w, http.StatusCreated, msg)
@@ -217,4 +224,134 @@ func SearchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, results)
+}
+
+// EditMessage lets the sender edit their own message content.
+func EditMessage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	msgID := chi.URLParam(r, "id")
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Content == "" {
+		jsonError(w, "Content required", http.StatusBadRequest)
+		return
+	}
+
+	var senderID string
+	if err := db.DB.QueryRow("SELECT sender_id FROM messages WHERE id = ?", msgID).Scan(&senderID); err != nil {
+		jsonError(w, "Message not found", http.StatusNotFound)
+		return
+	}
+	if senderID != userID {
+		jsonError(w, "Not your message", http.StatusForbidden)
+		return
+	}
+
+	now := time.Now()
+	db.DB.Exec("UPDATE messages SET content = ?, edited_at = ? WHERE id = ?", req.Content, now, msgID)
+
+	var channelID, recipientID *string
+	db.DB.QueryRow("SELECT channel_id, recipient_id FROM messages WHERE id = ?", msgID).Scan(&channelID, &recipientID)
+
+	payload := map[string]interface{}{"id": msgID, "content": req.Content, "edited_at": now}
+	if channelID != nil {
+		Hub.BroadcastToChannel(*channelID, models.WSMessage{Type: "message_edit", Payload: payload})
+	} else if recipientID != nil {
+		Hub.SendToUser(*recipientID, models.WSMessage{Type: "message_edit", Payload: payload})
+		Hub.SendToUser(userID, models.WSMessage{Type: "message_edit", Payload: payload})
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "edited"})
+}
+
+// DeleteMessage lets the sender or a server moderator delete a message.
+func DeleteMessage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	msgID := chi.URLParam(r, "id")
+
+	var senderID string
+	var channelID, recipientID, serverID *string
+	if err := db.DB.QueryRow(
+		"SELECT sender_id, channel_id, recipient_id, server_id FROM messages WHERE id = ?", msgID,
+	).Scan(&senderID, &channelID, &recipientID, &serverID); err != nil {
+		jsonError(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	canDelete := senderID == userID
+	if !canDelete && serverID != nil {
+		canDelete = hasServerPermission(*serverID, userID, PermissionManageMessages)
+	}
+	if !canDelete {
+		jsonError(w, "No permission", http.StatusForbidden)
+		return
+	}
+
+	db.DB.Exec("DELETE FROM messages WHERE id = ?", msgID)
+
+	payload := map[string]string{"id": msgID}
+	if channelID != nil {
+		Hub.BroadcastToChannel(*channelID, models.WSMessage{Type: "message_delete", Payload: payload})
+	} else if recipientID != nil {
+		Hub.SendToUser(*recipientID, models.WSMessage{Type: "message_delete", Payload: payload})
+		Hub.SendToUser(senderID, models.WSMessage{Type: "message_delete", Payload: payload})
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// PurgeUserMessages deletes up to 100 recent messages from a target user in a server.
+// Requires PermissionManageMessages.
+func PurgeUserMessages(w http.ResponseWriter, r *http.Request) {
+	moderatorID := middleware.GetUserID(r)
+	serverID := chi.URLParam(r, "serverID")
+	targetUserID := chi.URLParam(r, "userID")
+
+	if !hasServerPermission(serverID, moderatorID, PermissionManageMessages) {
+		jsonError(w, "No permission", http.StatusForbidden)
+		return
+	}
+
+	rows, err := db.DB.Query(
+		`SELECT id, channel_id FROM messages WHERE sender_id = ? AND server_id = ? ORDER BY created_at DESC LIMIT 100`,
+		targetUserID, serverID,
+	)
+	if err != nil {
+		jsonError(w, "Query failed", http.StatusInternalServerError)
+		return
+	}
+
+	type msgRow struct{ id, channelID string }
+	var batch []msgRow
+	for rows.Next() {
+		var m msgRow
+		var ch *string
+		rows.Scan(&m.id, &ch)
+		if ch != nil {
+			m.channelID = *ch
+		}
+		batch = append(batch, m)
+	}
+	rows.Close()
+
+	channelIDs := map[string][]string{}
+	for _, m := range batch {
+		db.DB.Exec("DELETE FROM messages WHERE id = ?", m.id)
+		if m.channelID != "" {
+			channelIDs[m.channelID] = append(channelIDs[m.channelID], m.id)
+		}
+	}
+	for chID, ids := range channelIDs {
+		Hub.BroadcastToChannel(chID, models.WSMessage{
+			Type:    "messages_purge",
+			Payload: map[string]interface{}{"message_ids": ids, "user_id": targetUserID},
+		})
+	}
+
+	createAuditLog(serverID, moderatorID, 50, targetUserID, "messages",
+		map[string]interface{}{"count": len(batch)}, "purge")
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"deleted": len(batch)})
 }

@@ -7,10 +7,12 @@ import { messages as messagesApi, handshakes, users as usersApi, calls as callsA
 import { useAuthStore } from '../../stores/authStore';
 import { useWSStore } from '../../stores/wsStore';
 import type { Message } from '../../lib/types';
-import { Send, ArrowLeft, Phone } from 'lucide-react';
+import { Send, ArrowLeft, Phone, Check, X } from 'lucide-react';
 import { TypingIndicator, useTypingEmitter } from '../../components/TypingIndicator';
 import { FormattedText } from '../../components/FormattedText';
 import { FormatHelper } from '../../components/FormatHelper';
+import { MessageContextMenu, Copy, Edit2, Trash2 } from '../../components/MessageContextMenu';
+import type { ContextMenuItem } from '../../components/MessageContextMenu';
 
 export function DMConversationPage() {
   const { userId } = useParams({ strict: false }) as { userId: string };
@@ -24,6 +26,9 @@ export function DMConversationPage() {
   const [otherUser, setOtherUser] = useState<any>(null);
   const [hasHandshake, setHasHandshake] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; msg: Message } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

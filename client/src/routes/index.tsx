@@ -1,9 +1,91 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../components/GlassPanel';
 import { useAuthStore } from '../stores/authStore';
-import { Shield, LogIn, UserPlus, Key } from 'lucide-react';
+import { Shield, LogIn, UserPlus, Key, RefreshCw } from 'lucide-react';
 import { twofa as twofaApi } from '../lib/api';
+
+function useCaptcha() {
+  const [a, setA] = useState(() => Math.floor(Math.random() * 15) + 5);
+  const [b, setB] = useState(() => Math.floor(Math.random() * 15) + 5);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const draw = useCallback((numA: number, numB: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = 'rgba(20, 15, 40, 0.85)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Noise lines
+    for (let i = 0; i < 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * W, Math.random() * H);
+      ctx.bezierCurveTo(
+        Math.random() * W, Math.random() * H,
+        Math.random() * W, Math.random() * H,
+        Math.random() * W, Math.random() * H
+      );
+      ctx.strokeStyle = `hsla(${Math.random() * 360},60%,55%,0.35)`;
+      ctx.lineWidth = 1 + Math.random();
+      ctx.stroke();
+    }
+
+    // Noise dots
+    for (let i = 0; i < 40; i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random() * W, Math.random() * H, Math.random() * 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.1 + Math.random() * 0.2})`;
+      ctx.fill();
+    }
+
+    // Draw distorted text
+    const text = `${numA} + ${numB} = ?`;
+    const chars = text.split('');
+    const startX = (W - chars.length * 16) / 2;
+    ctx.save();
+    chars.forEach((ch, i) => {
+      const x = startX + i * 16 + (Math.random() - 0.5) * 4;
+      const y = H / 2 + (Math.random() - 0.5) * 8;
+      const angle = (Math.random() - 0.5) * 0.35;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.font = `bold ${18 + Math.floor(Math.random() * 6)}px monospace`;
+      ctx.fillStyle = `hsl(${200 + i * 22},90%,72%)`;
+      ctx.shadowColor = 'rgba(100,150,255,0.6)';
+      ctx.shadowBlur = 4;
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    });
+    ctx.restore();
+
+    // Border
+    ctx.strokeStyle = 'rgba(100,100,200,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, W, H);
+  }, []);
+
+  const refresh = useCallback(() => {
+    const na = Math.floor(Math.random() * 15) + 5;
+    const nb = Math.floor(Math.random() * 15) + 5;
+    setA(na);
+    setB(nb);
+    setTimeout(() => draw(na, nb), 0);
+  }, [draw]);
+
+  useEffect(() => {
+    draw(a, b);
+  }, []);
+
+  const validate = (input: string) => parseInt(input, 10) === a + b;
+
+  return { canvasRef, refresh, validate };
+}
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -16,6 +98,9 @@ export function AuthPage() {
   const [needs2FA, setNeeds2FA] = useState(false);
   const [twoFAUserId, setTwoFAUserId] = useState('');
   const [twoFACode, setTwoFACode] = useState('');
+  const [captchaInput, setCaptchaInput] = useState('');
+  const [captchaError, setCaptchaError] = useState('');
+  const { canvasRef, refresh, validate } = useCaptcha();
 
   // Redirect if already logged in
   React.useEffect(() => {
@@ -34,14 +119,21 @@ export function AuthPage() {
       }
       return;
     }
-    if (mode === 'login') {
+    if (mode === 'register') {
+      if (!validate(captchaInput)) {
+        setCaptchaError('Incorrect answer. Please try again.');
+        refresh();
+        setCaptchaInput('');
+        return;
+      }
+      setCaptchaError('');
+      await register(username, email, password, keyIterations);
+    } else {
       const res = await login(email, password);
       if (res?.requires_2fa) {
         setNeeds2FA(true);
         setTwoFAUserId(res.user_id);
       }
-    } else {
-      await register(username, email, password, keyIterations);
     }
   };
 
@@ -132,6 +224,41 @@ export function AuthPage() {
                 <span>128 (faster)</span>
                 <span>8192 (more secure)</span>
               </div>
+            </div>
+          )}
+
+          {mode === 'register' && (
+            <div className="animate-slide-up">
+              <label className="text-sm text-gray-200 mb-2 block">Security Verification</label>
+              <div className="flex items-center gap-2 mb-2">
+                <canvas
+                  ref={canvasRef}
+                  width={240}
+                  height={56}
+                  className="rounded-lg flex-1"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className="btn btn-glass !p-2"
+                  title="Refresh CAPTCHA"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Enter the sum shown above"
+                value={captchaInput}
+                onChange={e => { setCaptchaInput(e.target.value); setCaptchaError(''); }}
+                required
+                className="w-full"
+                inputMode="numeric"
+              />
+              {captchaError && (
+                <p className="text-xs text-red-400 mt-1">{captchaError}</p>
+              )}
             </div>
           )}
 

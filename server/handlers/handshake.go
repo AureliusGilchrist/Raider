@@ -81,6 +81,11 @@ func InitiateHandshake(w http.ResponseWriter, r *http.Request) {
 		Payload: hs,
 	})
 
+	// Notify the target user
+	var initiatorName string
+	db.DB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&initiatorName)
+	CreateNotification(req.TargetUserID, "handshake", "Handshake request", initiatorName+" wants to handshake with you", "/app/profile/"+userID)
+
 	jsonResponse(w, http.StatusCreated, hs)
 }
 

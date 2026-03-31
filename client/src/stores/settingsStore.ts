@@ -68,7 +68,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     document.documentElement.style.setProperty('--accent-color', s.accent_color);
 
     // Animated themes
-    const animatedThemes = ['space', 'ocean', 'aurora', 'lava', 'matrix', 'sakura'];
+    const animatedThemes = ['space', 'ocean', 'aurora', 'matrix', 'sakura', 'deep_sea', 'black_hole', 'neon', 'sunset', 'midnight'];
     animatedThemes.forEach(t => body.classList.remove(`${t}-theme`));
     if (animatedThemes.includes(s.color_scheme)) {
       body.classList.add(`${s.color_scheme}-theme`);

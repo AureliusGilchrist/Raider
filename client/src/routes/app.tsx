@@ -4,7 +4,8 @@ import { PageTransition } from '../components/PageTransition';
 import { useAuthStore } from '../stores/authStore';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Avatar } from '../components/Avatar';
-import { Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe, UserCircle } from 'lucide-react';
+import { Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe, UserCircle, Bell, ShieldCheck } from 'lucide-react';
+import { notifications as notifApi } from '../lib/api';
 import { StatusIndicator } from '../components/StatusIndicator';
 import { useIdleDetector } from '../hooks/useIdleDetector';
 import { useWSStore } from '../stores/wsStore';
@@ -17,6 +18,7 @@ export function AppLayout() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showStatusMenu, setShowStatusMenu] = React.useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = React.useState(0);
   const previousStatusRef = React.useRef<string>(user?.status || 'online');
 
   // Idle detection - auto set to away after 10 min
@@ -43,6 +45,18 @@ export function AppLayout() {
     return unsub;
   }, [on]);
 
+  // Load initial unread notification count and listen for new ones
+  React.useEffect(() => {
+    notifApi.unreadCount().then(d => setUnreadNotifCount(d.count)).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = on('new_notification', () => {
+      setUnreadNotifCount(c => c + 1);
+    });
+    return unsub;
+  }, [on]);
+
   const handleStatusChange = (newStatus: string) => {
     if (!user) return;
     previousStatusRef.current = newStatus;
@@ -62,7 +76,22 @@ export function AppLayout() {
     { to: '/app/dm', icon: <MessageSquare size={20} />, label: 'Messages' },
     { to: '/app/groups', icon: <Users size={20} />, label: 'Groups' },
     { to: '/app/servers', icon: <Globe size={20} />, label: 'Servers' },
-    { to: '/app/settings', icon: <Settings size={20} />, label: 'Settings' },
+    {
+      to: '/app/notifications',
+      icon: (
+        <div className="relative">
+          <Bell size={20} />
+          {unreadNotifCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+              {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+            </span>
+          )}
+        </div>
+      ),
+      label: 'Notifications',
+      onClick: () => setUnreadNotifCount(0),
+    },
+    { to: '/app/settings/profile', icon: <Settings size={20} />, label: 'Settings' },
   ];
 
   return (
@@ -76,7 +105,7 @@ export function AppLayout() {
           {/* Logo */}
           <Link to="/app/timeline" className="flex items-center gap-2 px-3 py-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
-              <span className="text-white font-bold text-sm">R</span>
+              <ShieldCheck size={16} className="text-white" />
             </div>
             <span className="text-white font-bold hidden lg:block">Raider</span>
           </Link>
@@ -87,6 +116,7 @@ export function AppLayout() {
               <Link
                 key={item.to}
                 to={item.to}
+                onClick={(item as any).onClick}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all-custom"
                 activeProps={{ className: 'bg-white/20 text-white' }}
               >

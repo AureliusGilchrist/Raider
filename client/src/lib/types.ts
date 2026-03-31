@@ -10,6 +10,7 @@ export interface User {
   banner_type: string;
   gender?: string;
   gender_custom?: string;
+  sexuality?: string;
   pronouns?: string;
   languages: string;
   public_key?: number[];
@@ -50,6 +51,12 @@ export interface UserSettings {
   notification_servers: boolean;
   notification_calls: boolean;
   notification_sounds: boolean;
+  notification_follows: boolean;
+  notification_mentions: boolean;
+  notification_comments: boolean;
+  notification_post_votes: boolean;
+  notification_handshakes: boolean;
+  notification_group_messages: boolean;
   auto_lock_minutes: number;
   two_factor_enabled: boolean;
   advanced_ui: boolean;
@@ -140,6 +147,9 @@ export interface Post {
   content: string;
   media_url?: string;
   media_urls?: string[];
+  visibility?: 'followers' | 'logged_in' | 'public';
+  allow_share?: boolean;
+  allow_public_comments?: boolean;
   upvotes: number;
   downvotes: number;
   comment_count: number;
@@ -157,7 +167,10 @@ export interface Comment {
   parent_id?: string;
   content: string;
   upvotes: number;
+  downvotes: number;
+  user_vote: number;
   created_at: string;
+  edited_at?: string;
   author_name?: string;
 }
 
@@ -190,6 +203,17 @@ export interface DMContact {
   avatar_type: string;
   last_message?: string;
   last_message_at?: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  created_at: string;
 }
 
 export interface Share {
@@ -238,6 +262,7 @@ export interface ServerSettings {
   splash_url: string;
   banner_url: string;
   discovery_splash_url: string;
+  allow_guests?: boolean;
 }
 
 export interface WSMessage {

@@ -11,7 +11,265 @@ import { FormatHelper } from '../../components/FormatHelper';
 import { useWSStore } from '../../stores/wsStore';
 import { MediaViewer } from '../../components/MediaViewer';
 
+// ── Thread node colours by depth ──────────────────────────────────
+const DEPTH_COLORS = [
+  'border-indigo-500/60',
+  'border-purple-500/60',
+  'border-cyan-500/60',
+  'border-emerald-500/60',
+  'border-rose-500/60',
+];
+
+interface CommentNode extends Comment {
+  children: CommentNode[];
+}
+
+function buildTree(flat: Comment[]): CommentNode[] {
+  const map = new Map<string, CommentNode>();
+  flat.forEach(c => map.set(c.id, { ...c, children: [] }));
+  const roots: CommentNode[] = [];
+  flat.forEach(c => {
+    const node = map.get(c.id)!;
+    if (c.parent_id && map.has(c.parent_id)) {
+      map.get(c.parent_id)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
+function CommentThread({
+  node,
+  postId,
+  depth,
+  meId,
+  onAdd,
+  onVote,
+  onEdit,
+  onDelete,
+}: {
+  node: CommentNode;
+  postId: string;
+  depth: number;
+  meId: string;
+  onAdd: (c: Comment) => void;
+  onVote: (commentId: string, upvotes: number, downvotes: number, userVote: number) => void;
+  onEdit: (commentId: string, content: string, editedAt: string) => void;
+  onDelete: (commentId: string) => void;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
+  const [voting, setVoting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(node.content);
+  const borderColor = DEPTH_COLORS[depth % DEPTH_COLORS.length];
+
+  const handleReply = async () => {
+    const text = replyText.trim();
+    if (!text) return;
+    try {
+      const c = await postsApi.createComment(postId, { content: text, parent_id: node.id });
+      onAdd(c);
+      setReplyText('');
+      setReplying(false);
+    } catch {}
+  };
+
+  const handleVote = async (value: number) => {
+    if (voting) return;
+    // toggle off if same value
+    const next = node.user_vote === value ? 0 : value;
+    setVoting(true);
+    try {
+      const res = await postsApi.voteComment(postId, node.id, next);
+      onVote(node.id, res.upvotes, res.downvotes, res.user_vote);
+    } catch {} finally {
+      setVoting(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    const text = editText.trim();
+    if (!text || text === node.content) { setEditing(false); return; }
+    try {
+      const res = await postsApi.editComment(postId, node.id, text);
+      onEdit(node.id, res.content ?? text, res.edited_at ?? new Date().toISOString());
+      setEditing(false);
+    } catch {}
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this comment?')) return;
+    try {
+      await postsApi.deleteComment(postId, node.id);
+      onDelete(node.id);
+    } catch {}
+  };
+
+  const score = node.upvotes - node.downvotes;
+
+  return (
+    <div className={`flex gap-0 ${depth > 0 ? 'mt-2' : 'mt-3'}`}>
+      {/* Thread line — click to collapse */}
+      {depth > 0 && (
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          className={`shrink-0 w-4 mr-2 flex justify-center cursor-pointer group`}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          <div className={`w-0.5 h-full rounded-full ${borderColor} group-hover:opacity-100 opacity-50 transition-opacity`} />
+        </button>
+      )}
+
+      <div className="flex-1 min-w-0">
+        {/* Comment header */}
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-xs font-semibold text-indigo-300 truncate">{node.author_name ?? 'Unknown'}</span>
+          <span className="text-[10px] text-gray-600 shrink-0">
+            {new Date(node.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          </span>
+        </div>
+
+        {!collapsed && (
+          <>
+            {/* Body */}
+            {editing ? (
+              <div className="flex gap-1.5 mb-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleEdit(); if (e.key === 'Escape') setEditing(false); }}
+                  className="flex-1 text-xs !py-1 !px-2"
+                />
+                <button onClick={handleEdit} className="btn btn-primary !py-1 !px-2 text-xs"><Check size={11} /></button>
+                <button onClick={() => setEditing(false)} className="btn btn-glass !py-1 !px-2 text-xs"><X size={11} /></button>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-300 leading-relaxed mb-1.5">
+                <FormattedText text={node.content} />
+                {node.edited_at && <span className="text-[10px] text-gray-600 ml-1">(edited)</span>}
+              </p>
+            )}
+
+            {/* Action row */}
+            <div className="flex items-center gap-3 mb-1">
+              {/* Votes */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleVote(1)}
+                  disabled={voting}
+                  className={`p-0.5 rounded transition-colors ${node.user_vote === 1 ? 'text-orange-400' : 'text-gray-500 hover:text-orange-400'}`}
+                >
+                  <ArrowUp size={12} />
+                </button>
+                <span className={`text-[11px] font-medium min-w-[14px] text-center ${score > 0 ? 'text-orange-400' : score < 0 ? 'text-blue-400' : 'text-gray-500'}`}>
+                  {score}
+                </span>
+                <button
+                  onClick={() => handleVote(-1)}
+                  disabled={voting}
+                  className={`p-0.5 rounded transition-colors ${node.user_vote === -1 ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400'}`}
+                >
+                  <ArrowDown size={12} />
+                </button>
+              </div>
+
+              {/* Reply button */}
+              <button
+                onClick={() => setReplying(v => !v)}
+                className="text-[11px] text-gray-500 hover:text-indigo-400 transition-colors font-medium"
+              >
+                Reply
+              </button>
+
+              {/* Edit / Delete (own comments only) */}
+              {meId === node.author_id && !editing && (
+                <>
+                  <button
+                    onClick={() => { setEditText(node.content); setEditing(true); }}
+                    className="text-[11px] text-gray-600 hover:text-indigo-400 transition-colors"
+                    title="Edit comment"
+                  >
+                    <Pencil size={11} />
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="text-[11px] text-gray-600 hover:text-red-400 transition-colors"
+                    title="Delete comment"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </>
+              )}
+
+              {node.children.length > 0 && (
+                <button
+                  onClick={() => setCollapsed(v => !v)}
+                  className="text-[11px] text-gray-600 hover:text-gray-300 transition-colors"
+                >
+                  {collapsed ? `▶ ${node.children.length} replies` : '▼ hide'}
+                </button>
+              )}
+            </div>
+
+            {/* Inline reply box */}
+            {replying && (
+              <div className="flex gap-1.5 mb-2">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={`Reply to ${node.author_name ?? 'comment'}…`}
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleReply()}
+                  className="flex-1 text-xs !py-1 !px-2"
+                />
+                <button onClick={handleReply} className="btn btn-primary !py-1 !px-2 text-xs">
+                  <Send size={11} />
+                </button>
+                <button onClick={() => setReplying(false)} className="btn btn-glass !py-1 !px-2 text-xs">
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+
+            {/* Children */}
+            {node.children.map(child => (
+              <CommentThread
+                key={child.id}
+                node={child}
+                postId={postId}
+                depth={depth + 1}
+                meId={meId}
+                onAdd={onAdd}
+                onVote={onVote}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </>
+        )}
+
+        {collapsed && node.children.length > 0 && (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="text-[11px] text-gray-600 hover:text-gray-300 transition-colors"
+          >
+            ▶ {node.children.length} {node.children.length === 1 ? 'reply' : 'replies'} hidden
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InlineComments({ postId }: { postId: string }) {
+  const { user: me } = useAuthStore();
+  const { on } = useWSStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -20,41 +278,84 @@ function InlineComments({ postId }: { postId: string }) {
     postsApi.comments(postId).then(setComments).catch(() => {}).finally(() => setLoading(false));
   }, [postId]);
 
-  const handleAdd = async () => {
-    if (!newComment.trim()) return;
+  // Real-time WS updates for comments
+  useEffect(() => {
+    const unsubEdited = on('comment_edited', (msg) => {
+      const { post_id, comment } = msg.payload;
+      if (post_id !== postId) return;
+      setComments(prev => prev.map(c => c.id === comment.id ? { ...c, content: comment.content, edited_at: comment.edited_at } : c));
+    });
+    const unsubDeleted = on('comment_deleted', (msg) => {
+      const { post_id, comment_id } = msg.payload;
+      if (post_id !== postId) return;
+      setComments(prev => prev.filter(c => c.id !== comment_id));
+    });
+    return () => { unsubEdited(); unsubDeleted(); };
+  }, [on, postId]);
+
+  const handleAdd = (c: Comment) => {
+    setComments(prev => [...prev, c]);
+  };
+
+  const handleVote = (commentId: string, upvotes: number, downvotes: number, userVote: number) => {
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, upvotes, downvotes, user_vote: userVote } : c));
+  };
+
+  const handleEdit = (commentId: string, content: string, editedAt: string) => {
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, content, edited_at: editedAt } : c));
+  };
+
+  const handleDelete = (commentId: string) => {
+    setComments(prev => prev.filter(c => c.id !== commentId));
+  };
+
+  const handleTopLevel = async () => {
+    const text = newComment.trim();
+    if (!text) return;
     try {
-      const c = await postsApi.createComment(postId, { content: newComment });
-      setComments((prev) => [...prev, c]);
+      const c = await postsApi.createComment(postId, { content: text });
+      setComments(prev => [...prev, c]);
       setNewComment('');
     } catch {}
   };
 
+  const tree = buildTree(comments);
+
   return (
     <div className="mt-3 pt-3 border-t border-white/10">
       {loading ? (
-        <p className="text-xs text-gray-500">Loading comments...</p>
-      ) : comments.length === 0 ? (
-        <p className="text-xs text-gray-500 mb-2">No comments yet.</p>
+        <p className="text-xs text-gray-500">Loading comments…</p>
+      ) : tree.length === 0 ? (
+        <p className="text-xs text-gray-500 mb-2">No comments yet. Be the first!</p>
       ) : (
-        <div className="flex flex-col gap-2 mb-2 max-h-48 overflow-y-auto">
-          {comments.map((c) => (
-            <div key={c.id} className="flex gap-2">
-              <span className="text-xs font-semibold text-indigo-300 shrink-0">{c.author_name}</span>
-              <p className="text-xs text-gray-300"><FormattedText text={c.content} /></p>
-            </div>
+        <div className="flex flex-col mb-3 max-h-[480px] overflow-y-auto pr-1">
+          {tree.map(node => (
+            <CommentThread
+              key={node.id}
+              node={node}
+              postId={postId}
+              depth={0}
+              meId={me?.id ?? ''}
+              onAdd={handleAdd}
+              onVote={handleVote}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
       )}
-      <div className="flex gap-2">
+
+      {/* Top-level reply box */}
+      <div className="flex gap-2 mt-2">
         <input
           type="text"
-          placeholder="Write a comment..."
+          placeholder="Write a comment…"
           value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          onChange={e => setNewComment(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleTopLevel()}
           className="flex-1 text-xs !py-1.5 !px-2.5"
         />
-        <button onClick={handleAdd} className="btn btn-primary !py-1.5 !px-2.5 text-xs">
+        <button onClick={handleTopLevel} className="btn btn-primary !py-1.5 !px-2.5 text-xs">
           <Send size={12} />
         </button>
       </div>

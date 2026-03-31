@@ -12,6 +12,7 @@ import { DMConversationPage } from './routes/app/dmConversation';
 import { SettingsPage } from './routes/app/settings';
 import { CallPage } from './routes/app/call';
 import { GroupsPage } from './routes/app/groups';
+import { NotificationsPage } from './routes/app/notifications';
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -75,9 +76,22 @@ const groupsRoute = createRoute({
   component: GroupsPage,
 });
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/notifications',
+  component: NotificationsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
+  beforeLoad: () => { throw redirect({ to: '/app/settings/profile' }); },
+  component: () => null,
+});
+
+const settingsTabRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/$tab',
   component: SettingsPage,
 });
 
@@ -97,7 +111,9 @@ const routeTree = rootRoute.addChildren([
     dmRoute,
     dmConversationRoute,
     groupsRoute,
+    notificationsRoute,
     settingsRoute,
+    settingsTabRoute,
     callRoute,
   ]),
 ]);

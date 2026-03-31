@@ -110,6 +110,9 @@ export const messages = {
   channel: (channelId: string) => request<any[]>(`/messages/channel/${channelId}`),
   dm: (userId: string) => request<any[]>(`/messages/dm/${userId}`),
   dmList: () => request<any[]>('/messages/dm'),
+  edit: (id: string, content: string) => request<any>(`/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+  delete: (id: string) => request<any>(`/messages/${id}`, { method: 'DELETE' }),
+  purge: (serverId: string, userId: string) => request<any>(`/servers/${serverId}/purge/${userId}`, { method: 'DELETE' }),
 };
 
 // Group Chats
@@ -123,6 +126,8 @@ export const groups = {
   delete: (groupId: string) => request<any>(`/groups/${groupId}`, { method: 'DELETE' }),
   messages: (groupId: string) => request<any[]>(`/groups/${groupId}/messages`),
   sendMessage: (groupId: string, content: string) => request<any>(`/groups/${groupId}/messages`, { method: 'POST', body: JSON.stringify({ content, encrypted: false }) }),
+  editMessage: (groupId: string, id: string, content: string) => request<any>(`/groups/${groupId}/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+  deleteMessage: (groupId: string, id: string) => request<any>(`/groups/${groupId}/messages/${id}`, { method: 'DELETE' }),
 };
 
 // Posts
@@ -141,6 +146,13 @@ export const posts = {
   comments: (postId: string) => request<any[]>(`/posts/${postId}/comments`),
   createComment: (postId: string, data: { content: string; parent_id?: string }) =>
     request<any>(`/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+  voteComment: (postId: string, commentId: string, value: number) =>
+    request<{ upvotes: number; downvotes: number; user_vote: number }>(
+      `/posts/${postId}/comments/${commentId}/vote`, { method: 'POST', body: JSON.stringify({ value }) }),
+  editComment: (postId: string, commentId: string, content: string) =>
+    request<any>(`/posts/${postId}/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+  deleteComment: (postId: string, commentId: string) =>
+    request<any>(`/posts/${postId}/comments/${commentId}`, { method: 'DELETE' }),
 };
 
 // Calls
@@ -161,6 +173,8 @@ export const users = {
     request<any>('/follow', { method: 'POST', body: JSON.stringify({ target_id: targetId }) }),
   unfollow: (targetId: string) =>
     request<any>('/unfollow', { method: 'POST', body: JSON.stringify({ target_id: targetId }) }),
+  activity: (userId: string) =>
+    request<{ date: string; count: number }[]>(`/users/${userId}/activity`),
 };
 
 // Shares
@@ -180,6 +194,16 @@ export const announcements = {
     request<any>('/announcements', { method: 'POST', body: JSON.stringify(data) }),
   dismiss: (id: string) => request<any>(`/announcements/${id}/dismiss`, { method: 'POST' }),
   delete: (id: string) => request<any>(`/announcements/${id}`, { method: 'DELETE' }),
+};
+
+// Notifications
+export const notifications = {
+  list: () => request<any[]>('/notifications'),
+  unreadCount: () => request<{ count: number }>('/notifications/unread-count'),
+  markRead: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () => request<any>('/notifications/read-all', { method: 'POST' }),
+  delete: (id: string) => request<any>(`/notifications/${id}`, { method: 'DELETE' }),
+  clearAll: () => request<any>('/notifications', { method: 'DELETE' }),
 };
 
 // Uploads

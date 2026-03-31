@@ -125,11 +125,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	var passwordHash string
 	err := db.DB.QueryRow(`SELECT id, username, email, password_hash, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, card_artwork_url
+		banner_url, banner_type, gender, gender_custom, sexuality, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, card_artwork_url
 		FROM users WHERE email = ?`, req.Email).Scan(
 		&user.ID, &user.Username, &user.Email, &passwordHash, &user.DisplayName, &user.Bio,
 		&user.AvatarURL, &user.AvatarType, &user.BannerURL, &user.BannerType,
-		&user.Gender, &user.GenderCustom, &user.Pronouns,
+		&user.Gender, &user.GenderCustom, &user.Sexuality, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
 		&user.XP, &user.Level, &user.CardArtworkURL)
 	if err == sql.ErrNoRows {
@@ -176,11 +176,11 @@ func GetMe(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := db.DB.QueryRow(`SELECT id, username, email, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, status, status_message, card_artwork_url
+		banner_url, banner_type, gender, gender_custom, sexuality, pronouns, languages, public_key, key_iterations, peer_id, advanced_mode, xp, level, status, status_message, card_artwork_url
 		FROM users WHERE id = ?`, userID).Scan(
 		&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.Bio,
 		&user.AvatarURL, &user.AvatarType, &user.BannerURL, &user.BannerType,
-		&user.Gender, &user.GenderCustom, &user.Pronouns,
+		&user.Gender, &user.GenderCustom, &user.Sexuality, &user.Pronouns,
 		&user.Languages, &user.PublicKey, &user.KeyIterations, &user.PeerID, &user.AdvancedMode,
 		&user.XP, &user.Level, &user.Status, &user.StatusMessage, &user.CardArtworkURL)
 	if err != nil {
@@ -213,6 +213,10 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Gender must be under 50 characters", http.StatusBadRequest)
 		return
 	}
+	if req.Sexuality != nil && len(*req.Sexuality) > 80 {
+		jsonError(w, "Sexuality must be under 80 characters", http.StatusBadRequest)
+		return
+	}
 	if req.GenderCustom != nil && len(*req.GenderCustom) > 50 {
 		jsonError(w, "Custom gender must be under 50 characters", http.StatusBadRequest)
 		return
@@ -233,6 +237,9 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.GenderCustom != nil {
 		db.DB.Exec("UPDATE users SET gender_custom = ? WHERE id = ?", *req.GenderCustom, userID)
+	}
+	if req.Sexuality != nil {
+		db.DB.Exec("UPDATE users SET sexuality = ? WHERE id = ?", *req.Sexuality, userID)
 	}
 	if req.Pronouns != nil {
 		db.DB.Exec("UPDATE users SET pronouns = ? WHERE id = ?", *req.Pronouns, userID)

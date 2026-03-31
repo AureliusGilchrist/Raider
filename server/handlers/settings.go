@@ -17,43 +17,53 @@ func GetSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme,
+		IFNULL(notification_follows,1), IFNULL(notification_mentions,1), IFNULL(notification_comments,1),
+		IFNULL(notification_post_votes,0), IFNULL(notification_handshakes,1), IFNULL(notification_group_messages,1)
 		FROM user_settings WHERE user_id = ?`, userID).Scan(
 		&s.UserID, &s.ShowGender, &s.ShowPronouns, &s.ShowLanguages, &s.ShowServers,
 		&s.ShowStats, &s.ShowOnlineStatus, &s.ShowBio, &s.ShowLevel, &s.GlassEffect, &s.GradientBG,
 		&s.GradientColor1, &s.GradientColor2, &s.GradientColor3, &s.AnimationSpeed, &s.Theme, &s.FontSize,
 		&s.ReducedMotion, &s.HighContrast, &s.NotificationDMs, &s.NotificationServers, &s.NotificationCalls,
-		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch, &s.Ringtone, &s.ColorScheme)
+		&s.NotificationSounds, &s.AutoLockMinutes, &s.TwoFactorEnabled, &s.AdvancedUI, &s.CustomCSS, &s.AccentColor, &s.ShowBanner, &s.ShowInSearch, &s.Ringtone, &s.ColorScheme,
+		&s.NotificationFollows, &s.NotificationMentions, &s.NotificationComments,
+		&s.NotificationPostVotes, &s.NotificationHandshakes, &s.NotificationGroupMessages)
 	if err != nil {
 		// Create default settings if not found
 		db.DB.Exec("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", userID)
 		s = models.UserSettings{
-			UserID:              userID,
-			ShowGender:          true,
-			ShowPronouns:        true,
-			ShowLanguages:       true,
-			ShowServers:         true,
-			ShowStats:           true,
-			ShowOnlineStatus:    true,
-			ShowBio:             true,
-			ShowLevel:           true,
-			GlassEffect:         true,
-			GradientBG:          true,
-			GradientColor1:      "#6366f1",
-			GradientColor2:      "#8b5cf6",
-			GradientColor3:      "#a855f7",
-			AnimationSpeed:      "normal",
-			Theme:               "dark",
-			FontSize:            "medium",
-			NotificationDMs:     true,
-			NotificationServers: true,
-			NotificationCalls:   true,
-			NotificationSounds:  true,
-			AccentColor:         "#6366f1",
-			ShowBanner:          true,
-			ShowInSearch:        true,
-			Ringtone:            "default",
-			ColorScheme:         "default",
+			UserID:                    userID,
+			ShowGender:                true,
+			ShowPronouns:              true,
+			ShowLanguages:             true,
+			ShowServers:               true,
+			ShowStats:                 true,
+			ShowOnlineStatus:          true,
+			ShowBio:                   true,
+			ShowLevel:                 true,
+			GlassEffect:               true,
+			GradientBG:                true,
+			GradientColor1:            "#6366f1",
+			GradientColor2:            "#8b5cf6",
+			GradientColor3:            "#a855f7",
+			AnimationSpeed:            "normal",
+			Theme:                     "dark",
+			FontSize:                  "medium",
+			NotificationDMs:           true,
+			NotificationServers:       true,
+			NotificationCalls:         true,
+			NotificationSounds:        true,
+			NotificationFollows:       true,
+			NotificationMentions:      true,
+			NotificationComments:      true,
+			NotificationPostVotes:     false,
+			NotificationHandshakes:    true,
+			NotificationGroupMessages: true,
+			AccentColor:               "#6366f1",
+			ShowBanner:                true,
+			ShowInSearch:              true,
+			Ringtone:                  "default",
+			ColorScheme:               "default",
 		}
 	}
 
@@ -73,25 +83,29 @@ func UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		show_stats, show_online_status, show_bio, show_level, glass_effect, gradient_bg,
 		gradient_color1, gradient_color2, gradient_color3, animation_speed, theme, font_size,
 		reduced_motion, high_contrast, notification_dms, notification_servers, notification_calls,
-		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		notification_sounds, auto_lock_minutes, two_factor_enabled, advanced_ui, custom_css, accent_color, show_banner, show_in_search, ringtone, color_scheme,
+		notification_follows, notification_mentions, notification_comments, notification_post_votes, notification_handshakes, notification_group_messages)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(user_id) DO UPDATE SET
 		show_gender=?, show_pronouns=?, show_languages=?, show_servers=?,
 		show_stats=?, show_online_status=?, show_bio=?, show_level=?, glass_effect=?, gradient_bg=?,
 		gradient_color1=?, gradient_color2=?, gradient_color3=?, animation_speed=?, theme=?, font_size=?,
 		reduced_motion=?, high_contrast=?, notification_dms=?, notification_servers=?, notification_calls=?,
-		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?, ringtone=?, color_scheme=?`,
+		notification_sounds=?, auto_lock_minutes=?, two_factor_enabled=?, advanced_ui=?, custom_css=?, accent_color=?, show_banner=?, show_in_search=?, ringtone=?, color_scheme=?,
+		notification_follows=?, notification_mentions=?, notification_comments=?, notification_post_votes=?, notification_handshakes=?, notification_group_messages=?`,
 		userID, s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
 		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone, s.ColorScheme,
+		s.NotificationFollows, s.NotificationMentions, s.NotificationComments, s.NotificationPostVotes, s.NotificationHandshakes, s.NotificationGroupMessages,
 		// ON CONFLICT update values
 		s.ShowGender, s.ShowPronouns, s.ShowLanguages, s.ShowServers,
 		s.ShowStats, s.ShowOnlineStatus, s.ShowBio, s.ShowLevel, s.GlassEffect, s.GradientBG,
 		s.GradientColor1, s.GradientColor2, s.GradientColor3, s.AnimationSpeed, s.Theme, s.FontSize,
 		s.ReducedMotion, s.HighContrast, s.NotificationDMs, s.NotificationServers, s.NotificationCalls,
-		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone, s.ColorScheme)
+		s.NotificationSounds, s.AutoLockMinutes, s.TwoFactorEnabled, s.AdvancedUI, s.CustomCSS, s.AccentColor, s.ShowBanner, s.ShowInSearch, s.Ringtone, s.ColorScheme,
+		s.NotificationFollows, s.NotificationMentions, s.NotificationComments, s.NotificationPostVotes, s.NotificationHandshakes, s.NotificationGroupMessages)
 	if err != nil {
 		jsonError(w, "Failed to update settings", http.StatusInternalServerError)
 		return
@@ -203,6 +217,11 @@ func FollowUser(w http.ResponseWriter, r *http.Request) {
 	db.DB.Exec("UPDATE user_stats SET followers_count = followers_count + 1 WHERE user_id = ?", req.TargetID)
 	addXP(userID, 5)
 
+	// Notify the followed user
+	var followerName string
+	db.DB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&followerName)
+	CreateNotification(req.TargetID, "follow", "New follower", followerName+" started following you", "/app/profile/"+userID)
+
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "followed"})
 }
 
@@ -269,10 +288,10 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := db.DB.QueryRow(`SELECT id, username, display_name, bio, avatar_url, avatar_type,
-		banner_url, banner_type, gender, gender_custom, pronouns, languages, public_key, peer_id, advanced_mode, xp, level, card_artwork_url, created_at
+		banner_url, banner_type, gender, gender_custom, sexuality, pronouns, languages, public_key, peer_id, advanced_mode, xp, level, card_artwork_url, created_at
 		FROM users WHERE id = ?`, targetID).Scan(
 		&user.ID, &user.Username, &user.DisplayName, &user.Bio, &user.AvatarURL, &user.AvatarType,
-		&user.BannerURL, &user.BannerType, &user.Gender, &user.GenderCustom, &user.Pronouns, &user.Languages, &user.PublicKey,
+		&user.BannerURL, &user.BannerType, &user.Gender, &user.GenderCustom, &user.Sexuality, &user.Pronouns, &user.Languages, &user.PublicKey,
 		&user.PeerID, &user.AdvancedMode, &user.XP, &user.Level, &user.CardArtworkURL, &user.CreatedAt)
 	if err != nil {
 		jsonError(w, "User not found", http.StatusNotFound)
@@ -293,6 +312,7 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		if !settings.ShowGender {
 			user.Gender = ""
 			user.GenderCustom = ""
+			user.Sexuality = ""
 		}
 		if !settings.ShowPronouns {
 			user.Pronouns = ""

@@ -16,6 +16,7 @@ type User struct {
 	Gender              string    `json:"gender,omitempty"`
 	GenderCustom        string    `json:"gender_custom,omitempty"`
 	Pronouns            string    `json:"pronouns,omitempty"`
+	Sexuality           string    `json:"sexuality,omitempty"`
 	Languages           string    `json:"languages"`
 	PublicKey           []byte    `json:"public_key,omitempty"`
 	EncryptedPrivateKey []byte    `json:"-"`
@@ -35,10 +36,13 @@ type User struct {
 
 type UserSettings struct {
 	UserID              string `json:"user_id"`
-	ShowGender          bool   `json:"show_gender"`
-	ShowPronouns        bool   `json:"show_pronouns"`
-	ShowLanguages       bool   `json:"show_languages"`
-	ShowServers         bool   `json:"show_servers"`
+	Title               string  `json:"title"`
+	Content             string  `json:"content"`
+	ServerID            *string `json:"server_id,omitempty"`
+	MediaURL            string  `json:"media_url"`
+	Visibility          string  `json:"visibility,omitempty"`
+	AllowShare          *bool   `json:"allow_share,omitempty"`
+	AllowPublicComments *bool   `json:"allow_public_comments,omitempty"`
 	ShowStats           bool   `json:"show_stats"`
 	ShowOnlineStatus    bool   `json:"show_online_status"`
 	ShowBio             bool   `json:"show_bio"`
@@ -46,6 +50,7 @@ type UserSettings struct {
 	GlassEffect         bool   `json:"glass_effect"`
 	GradientBG          bool   `json:"gradient_bg"`
 	GradientColor1      string `json:"gradient_color1"`
+	Sexuality     *string `json:"sexuality,omitempty"`
 	GradientColor2      string `json:"gradient_color2"`
 	GradientColor3      string `json:"gradient_color3"`
 	AnimationSpeed      string `json:"animation_speed"`
@@ -57,17 +62,38 @@ type UserSettings struct {
 	NotificationServers bool   `json:"notification_servers"`
 	NotificationCalls   bool   `json:"notification_calls"`
 	NotificationSounds  bool   `json:"notification_sounds"`
-	AutoLockMinutes     int    `json:"auto_lock_minutes"`
-	TwoFactorEnabled    bool   `json:"two_factor_enabled"`
-	AdvancedUI          bool   `json:"advanced_ui"`
-	CustomCSS           string `json:"custom_css"`
-	AccentColor         string `json:"accent_color"`
-	ShowBanner          bool   `json:"show_banner"`
-	ShowInSearch        bool   `json:"show_in_search"`
-	Ringtone            string `json:"ringtone"`
-	ColorScheme         string `json:"color_scheme"`
+	AutoLockMinutes               int    `json:"auto_lock_minutes"`
+	TwoFactorEnabled              bool   `json:"two_factor_enabled"`
+	AdvancedUI                    bool   `json:"advanced_ui"`
+	CustomCSS                     string `json:"custom_css"`
+	AccentColor                   string `json:"accent_color"`
+	ShowBanner                    bool   `json:"show_banner"`
+	ShowInSearch                  bool   `json:"show_in_search"`
+	Ringtone                      string `json:"ringtone"`
+	ColorScheme                   string `json:"color_scheme"`
+	NotificationFollows           bool   `json:"notification_follows"`
+	NotificationMentions          bool   `json:"notification_mentions"`
+	NotificationComments          bool   `json:"notification_comments"`
+	NotificationPostVotes         bool   `json:"notification_post_votes"`
+	NotificationHandshakes        bool   `json:"notification_handshakes"`
+	NotificationGroupMessages     bool   `json:"notification_group_messages"`
 }
 
+type Notification struct {
+	ID        string    `json:"id"`
+	AllowGuests                 bool   `json:"allow_guests"`
+	UserID    string    `json:"user_id"`
+	Type      string    `json:"type"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	Link      string    `json:"link"`
+	Read      bool      `json:"read"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+	Visibility   string     `json:"visibility"`
+	AllowShare   bool       `json:"allow_share"`
+	AllowPublicComments bool `json:"allow_public_comments"`
 type UserStats struct {
 	UserID          string `json:"user_id"`
 	MessagesSent    int    `json:"messages_sent"`
@@ -190,14 +216,17 @@ type Post struct {
 }
 
 type Comment struct {
-	ID        string    `json:"id"`
-	PostID    string    `json:"post_id"`
-	AuthorID  string    `json:"author_id"`
-	ParentID  *string   `json:"parent_id,omitempty"`
-	Content   string    `json:"content"`
-	Upvotes   int       `json:"upvotes"`
-	CreatedAt time.Time `json:"created_at"`
-	AuthorName string   `json:"author_name,omitempty"`
+	ID         string     `json:"id"`
+	PostID     string     `json:"post_id"`
+	AuthorID   string     `json:"author_id"`
+	ParentID   *string    `json:"parent_id,omitempty"`
+	Content    string     `json:"content"`
+	Upvotes    int        `json:"upvotes"`
+	Downvotes  int        `json:"downvotes"`
+	UserVote   int        `json:"user_vote"`
+	CreatedAt  time.Time  `json:"created_at"`
+	EditedAt   *time.Time `json:"edited_at,omitempty"`
+	AuthorName string     `json:"author_name,omitempty"`
 }
 
 type CallSession struct {

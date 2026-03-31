@@ -17,5 +17,13 @@ export function RootLayout() {
     }
   }, [token]);
 
+  // Suppress the default browser context menu everywhere.
+  // Elements that use a custom context menu should handle contextmenu themselves.
+  useEffect(() => {
+    const suppress = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', suppress);
+    return () => document.removeEventListener('contextmenu', suppress);
+  }, []);
+
   return <Outlet />;
 }

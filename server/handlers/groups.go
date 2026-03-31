@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"raider/db"
 	"raider/middleware"
@@ -398,4 +399,69 @@ func SendGroupMessage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	jsonResponse(w, http.StatusCreated, msg)
+}
+
+// EditGroupMessage lets the sender edit their own group message.
+func EditGroupMessage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	groupID := chi.URLParam(r, "groupID")
+	msgID := chi.URLParam(r, "id")
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Content == "" {
+		jsonError(w, "Content required", http.StatusBadRequest)
+		return
+	}
+
+	var senderID string
+	if err := db.DB.QueryRow("SELECT sender_id FROM group_messages WHERE id = ? AND group_id = ?", msgID, groupID).Scan(&senderID); err != nil {
+		jsonError(w, "Message not found", http.StatusNotFound)
+		return
+	}
+	if senderID != userID {
+		jsonError(w, "Not your message", http.StatusForbidden)
+		return
+	}
+
+	now := time.Now()
+	db.DB.Exec("UPDATE group_messages SET content = ?, edited_at = ? WHERE id = ?", req.Content, now, msgID)
+
+	Hub.BroadcastToGroup(groupID, models.WSMessage{
+		Type:    "group_message_edit",
+		Payload: map[string]interface{}{"id": msgID, "group_id": groupID, "content": req.Content, "edited_at": now},
+	})
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "edited"})
+}
+
+// DeleteGroupMessage lets the sender or group creator delete a group message.
+func DeleteGroupMessage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	groupID := chi.URLParam(r, "groupID")
+	msgID := chi.URLParam(r, "id")
+
+	var senderID string
+	if err := db.DB.QueryRow("SELECT sender_id FROM group_messages WHERE id = ? AND group_id = ?", msgID, groupID).Scan(&senderID); err != nil {
+		jsonError(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	var creatorID string
+	db.DB.QueryRow("SELECT creator_id FROM group_chats WHERE id = ?", groupID).Scan(&creatorID)
+
+	if senderID != userID && creatorID != userID {
+		jsonError(w, "No permission", http.StatusForbidden)
+		return
+	}
+
+	db.DB.Exec("DELETE FROM group_messages WHERE id = ?", msgID)
+
+	Hub.BroadcastToGroup(groupID, models.WSMessage{
+		Type:    "group_message_delete",
+		Payload: map[string]string{"id": msgID, "group_id": groupID},
+	})
+
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

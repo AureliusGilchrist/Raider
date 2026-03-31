@@ -49,6 +49,7 @@ func migrate() {
 		avatar_type TEXT DEFAULT 'image',
 		gender TEXT DEFAULT '',
 		gender_custom TEXT DEFAULT '',
+		sexuality TEXT DEFAULT '',
 		pronouns TEXT DEFAULT '',
 		languages TEXT DEFAULT '[]',
 		public_key BLOB,
@@ -334,7 +335,8 @@ func migrate() {
 		welcome_screen_description TEXT DEFAULT '',
 		splash_url TEXT DEFAULT '',
 		banner_url TEXT DEFAULT '',
-		discovery_splash_url TEXT DEFAULT ''
+		discovery_splash_url TEXT DEFAULT '',
+		allow_guests INTEGER DEFAULT 0
 	);
 
 	-- Welcome Screen Channels
@@ -410,6 +412,9 @@ func migrate() {
 		title TEXT NOT NULL,
 		content TEXT NOT NULL,
 		media_url TEXT DEFAULT '',
+		visibility TEXT DEFAULT 'followers',
+		allow_share INTEGER DEFAULT 1,
+		allow_public_comments INTEGER DEFAULT 1,
 		upvotes INTEGER DEFAULT 0,
 		downvotes INTEGER DEFAULT 0,
 		comment_count INTEGER DEFAULT 0,
@@ -432,7 +437,15 @@ func migrate() {
 		parent_id TEXT,
 		content TEXT NOT NULL,
 		upvotes INTEGER DEFAULT 0,
+		downvotes INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS comment_votes (
+		comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		value INTEGER NOT NULL CHECK(value IN (-1, 1)),
+		PRIMARY KEY (comment_id, user_id)
 	);
 
 	CREATE TABLE IF NOT EXISTS call_sessions (
@@ -506,6 +519,17 @@ func migrate() {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS notifications (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		type TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT NOT NULL,
+		link TEXT DEFAULT '',
+		read INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS uploads (
 		id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL REFERENCES users(id),
@@ -555,6 +579,20 @@ func migrate() {
 		`ALTER TABLE users ADD COLUMN card_artwork_url TEXT DEFAULT ''`,
 		`ALTER TABLE user_settings ADD COLUMN color_scheme TEXT DEFAULT 'default'`,
 		`ALTER TABLE users ADD COLUMN two_factor_secret TEXT DEFAULT ''`,
+		`ALTER TABLE user_settings ADD COLUMN notification_follows INTEGER DEFAULT 1`,
+		`ALTER TABLE user_settings ADD COLUMN notification_mentions INTEGER DEFAULT 1`,
+		`ALTER TABLE user_settings ADD COLUMN notification_comments INTEGER DEFAULT 1`,
+		`ALTER TABLE user_settings ADD COLUMN notification_post_votes INTEGER DEFAULT 0`,
+		`ALTER TABLE user_settings ADD COLUMN notification_handshakes INTEGER DEFAULT 1`,
+		`ALTER TABLE user_settings ADD COLUMN notification_group_messages INTEGER DEFAULT 1`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, read)`,
+		`ALTER TABLE comments ADD COLUMN edited_at DATETIME`,
+		`ALTER TABLE users ADD COLUMN sexuality TEXT DEFAULT ''`,
+		`ALTER TABLE posts ADD COLUMN visibility TEXT DEFAULT 'followers'`,
+		`ALTER TABLE posts ADD COLUMN allow_share INTEGER DEFAULT 1`,
+		`ALTER TABLE posts ADD COLUMN allow_public_comments INTEGER DEFAULT 1`,
+		`ALTER TABLE server_settings ADD COLUMN allow_guests INTEGER DEFAULT 0`,
 	}
 	for _, m := range additiveMigrations {
 		DB.Exec(m) // intentionally ignore error (column may already exist)
