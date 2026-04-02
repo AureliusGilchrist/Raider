@@ -36,13 +36,10 @@ type User struct {
 
 type UserSettings struct {
 	UserID              string `json:"user_id"`
-	Title               string  `json:"title"`
-	Content             string  `json:"content"`
-	ServerID            *string `json:"server_id,omitempty"`
-	MediaURL            string  `json:"media_url"`
-	Visibility          string  `json:"visibility,omitempty"`
-	AllowShare          *bool   `json:"allow_share,omitempty"`
-	AllowPublicComments *bool   `json:"allow_public_comments,omitempty"`
+	ShowGender          bool   `json:"show_gender"`
+	ShowPronouns        bool   `json:"show_pronouns"`
+	ShowLanguages       bool   `json:"show_languages"`
+	ShowServers         bool   `json:"show_servers"`
 	ShowStats           bool   `json:"show_stats"`
 	ShowOnlineStatus    bool   `json:"show_online_status"`
 	ShowBio             bool   `json:"show_bio"`
@@ -50,7 +47,6 @@ type UserSettings struct {
 	GlassEffect         bool   `json:"glass_effect"`
 	GradientBG          bool   `json:"gradient_bg"`
 	GradientColor1      string `json:"gradient_color1"`
-	Sexuality     *string `json:"sexuality,omitempty"`
 	GradientColor2      string `json:"gradient_color2"`
 	GradientColor3      string `json:"gradient_color3"`
 	AnimationSpeed      string `json:"animation_speed"`
@@ -81,7 +77,6 @@ type UserSettings struct {
 
 type Notification struct {
 	ID        string    `json:"id"`
-	AllowGuests                 bool   `json:"allow_guests"`
 	UserID    string    `json:"user_id"`
 	Type      string    `json:"type"`
 	Title     string    `json:"title"`
@@ -91,9 +86,6 @@ type Notification struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-	Visibility   string     `json:"visibility"`
-	AllowShare   bool       `json:"allow_share"`
-	AllowPublicComments bool `json:"allow_public_comments"`
 type UserStats struct {
 	UserID          string `json:"user_id"`
 	MessagesSent    int    `json:"messages_sent"`
@@ -183,19 +175,27 @@ type GroupMessage struct {
 	SenderAvatar string     `json:"sender_avatar,omitempty"`
 }
 
+type MessageReplyTo struct {
+	ID         string `json:"id"`
+	SenderName string `json:"sender_name"`
+	Content    string `json:"content"`
+}
+
 type Message struct {
-	ID          string    `json:"id"`
-	ChannelID   *string   `json:"channel_id,omitempty"`
-	SenderID    string    `json:"sender_id"`
-	RecipientID *string   `json:"recipient_id,omitempty"`
-	ServerID    *string   `json:"server_id,omitempty"`
-	Content     string    `json:"content"`
-	Encrypted   bool      `json:"encrypted"`
-	Nonce       []byte    `json:"nonce,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	EditedAt    *time.Time `json:"edited_at,omitempty"`
-	SenderName  string    `json:"sender_name,omitempty"`
-	SenderAvatar string   `json:"sender_avatar,omitempty"`
+	ID           string          `json:"id"`
+	ChannelID    *string         `json:"channel_id,omitempty"`
+	SenderID     string          `json:"sender_id"`
+	RecipientID  *string         `json:"recipient_id,omitempty"`
+	ServerID     *string         `json:"server_id,omitempty"`
+	Content      string          `json:"content"`
+	Encrypted    bool            `json:"encrypted"`
+	Nonce        []byte          `json:"nonce,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	EditedAt     *time.Time      `json:"edited_at,omitempty"`
+	SenderName   string          `json:"sender_name,omitempty"`
+	SenderAvatar string          `json:"sender_avatar,omitempty"`
+	ReplyToID    *string         `json:"reply_to_id,omitempty"`
+	ReplyTo      *MessageReplyTo `json:"reply_to,omitempty"`
 }
 
 type Post struct {
@@ -213,6 +213,9 @@ type Post struct {
 	AuthorName   string     `json:"author_name,omitempty"`
 	AuthorAvatar string     `json:"author_avatar,omitempty"`
 	UserVote     int        `json:"user_vote"`
+	Visibility          string `json:"visibility"`
+	AllowShare          bool   `json:"allow_share"`
+	AllowPublicComments bool   `json:"allow_public_comments"`
 }
 
 type Comment struct {
@@ -293,10 +296,13 @@ type CreateChannelRequest struct {
 }
 
 type CreatePostRequest struct {
-	Title    string  `json:"title"`
-	Content  string  `json:"content"`
-	ServerID *string `json:"server_id,omitempty"`
-	MediaURL string  `json:"media_url"`
+	Title               string  `json:"title"`
+	Content             string  `json:"content"`
+	ServerID            *string `json:"server_id,omitempty"`
+	MediaURL            string  `json:"media_url"`
+	Visibility          string  `json:"visibility,omitempty"`
+	AllowShare          *bool   `json:"allow_share,omitempty"`
+	AllowPublicComments *bool   `json:"allow_public_comments,omitempty"`
 }
 
 type SendMessageRequest struct {
@@ -306,6 +312,7 @@ type SendMessageRequest struct {
 	ServerID    *string `json:"server_id,omitempty"`
 	Encrypted   bool    `json:"encrypted"`
 	Nonce       []byte  `json:"nonce,omitempty"`
+	ReplyToID   *string `json:"reply_to_id,omitempty"`
 }
 
 type HandshakeRequest struct {
@@ -318,18 +325,20 @@ type HandshakeAcceptRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	DisplayName   *string `json:"display_name,omitempty"`
-	Bio           *string `json:"bio,omitempty"`
-	Gender        *string `json:"gender,omitempty"`
-	GenderCustom  *string `json:"gender_custom,omitempty"`
-	Pronouns      *string `json:"pronouns,omitempty"`
-	Languages     *string `json:"languages,omitempty"`
-	AdvancedMode  *bool   `json:"advanced_mode,omitempty"`
-	BannerURL     *string `json:"banner_url,omitempty"`
-	BannerType    *string `json:"banner_type,omitempty"`
-	Status        *string `json:"status,omitempty"`
-	StatusMessage *string `json:"status_message,omitempty"`
+	DisplayName    *string `json:"display_name,omitempty"`
+	Username       *string `json:"username,omitempty"`
+	Bio            *string `json:"bio,omitempty"`
+	Gender         *string `json:"gender,omitempty"`
+	GenderCustom   *string `json:"gender_custom,omitempty"`
+	Pronouns       *string `json:"pronouns,omitempty"`
+	Languages      *string `json:"languages,omitempty"`
+	AdvancedMode   *bool   `json:"advanced_mode,omitempty"`
+	BannerURL      *string `json:"banner_url,omitempty"`
+	BannerType     *string `json:"banner_type,omitempty"`
+	Status         *string `json:"status,omitempty"`
+	StatusMessage  *string `json:"status_message,omitempty"`
 	CardArtworkURL *string `json:"card_artwork_url,omitempty"`
+	Sexuality      *string `json:"sexuality,omitempty"`
 }
 
 type VoteRequest struct {
@@ -383,6 +392,8 @@ type ServerSettings struct {
 	SplashURL                   string `json:"splash_url"`
 	BannerURL                   string `json:"banner_url"`
 	DiscoverySplashURL          string `json:"discovery_splash_url"`
+	AllowGuests                 bool   `json:"allow_guests"`
+	DefaultSlowmode             int    `json:"default_slowmode"`
 }
 
 type WSMessage struct {

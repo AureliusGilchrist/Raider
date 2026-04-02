@@ -245,7 +245,9 @@ export function ServerPage() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col relative">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-[38px] pointer-events-none z-0 rounded-lg" />
+        <div className="relative z-10 flex-1 flex flex-col">
         <ServerAnnouncementBanner
           serverId={serverId}
           canEdit={server?.owner_id === user?.id}
@@ -320,7 +322,7 @@ export function ServerPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="p-3 border-t border-white/10">
+            <div className={`p-3 border-t border-white/10 ${(() => { const fx = localStorage.getItem('raider_chatbar_effect'); return fx && fx !== 'none' ? `chatbar-effect-${fx}` : ''; })()}`}>
               {replyTo && (
                 <div className="flex items-center justify-between mb-2 px-2 py-1 bg-white/5 rounded text-xs">
                   <span className="text-gray-400">Replying to <span className="text-indigo-300">{replyTo.sender_name}</span></span>
@@ -349,6 +351,7 @@ export function ServerPage() {
             Select a channel to start chatting
           </div>
         )}
+        </div>
       </div>
       {/* Members sidebar */}
       <div className="w-56 glass-light border-l border-white/10 flex flex-col shrink-0">
@@ -403,7 +406,11 @@ export function ServerPage() {
 
       {/* Server Settings Modal */}
       {showServerSettings && (
-        <ServerSettingsPanel serverId={serverId} onClose={() => setShowServerSettings(false)} />
+        <ServerSettingsPanel
+          serverId={serverId}
+          onClose={() => setShowServerSettings(false)}
+          onOpenRoleManager={() => setShowRoleManager(true)}
+        />
       )}
 
       {/* Announcement Editor Modal */}

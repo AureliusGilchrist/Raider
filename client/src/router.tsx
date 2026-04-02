@@ -13,6 +13,9 @@ import { SettingsPage } from './routes/app/settings';
 import { CallPage } from './routes/app/call';
 import { GroupsPage } from './routes/app/groups';
 import { NotificationsPage } from './routes/app/notifications';
+import { ShopPage } from './routes/app/shop';
+import { PublicPostPage } from './routes/publicPost';
+import PostDetailPage from './routes/app/postDetail';
 
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -32,6 +35,12 @@ const appRoute = createRoute({
     const token = localStorage.getItem('raider_token');
     if (!token) throw redirect({ to: '/' });
   },
+});
+
+const publicPostRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$postId',
+  component: PublicPostPage,
 });
 
 const timelineRoute = createRoute({
@@ -82,6 +91,12 @@ const notificationsRoute = createRoute({
   component: NotificationsPage,
 });
 
+const shopRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/shop',
+  component: ShopPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -101,8 +116,15 @@ const callRoute = createRoute({
   component: CallPage,
 });
 
+const postDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/post/$postId',
+  component: PostDetailPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  publicPostRoute,
   appRoute.addChildren([
     timelineRoute,
     profileRoute,
@@ -112,9 +134,11 @@ const routeTree = rootRoute.addChildren([
     dmConversationRoute,
     groupsRoute,
     notificationsRoute,
+    shopRoute,
     settingsRoute,
     settingsTabRoute,
     callRoute,
+    postDetailRoute,
   ]),
 ]);
 

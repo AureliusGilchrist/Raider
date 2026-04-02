@@ -4,7 +4,7 @@ import { PageTransition } from '../components/PageTransition';
 import { useAuthStore } from '../stores/authStore';
 import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import { Avatar } from '../components/Avatar';
-import { Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe, UserCircle, Bell, ShieldCheck } from 'lucide-react';
+import { Home, MessageSquare, Users, Settings, LogOut, Search, Phone, Globe, UserCircle, Bell, ShieldCheck, Store } from 'lucide-react';
 import { notifications as notifApi } from '../lib/api';
 import { StatusIndicator } from '../components/StatusIndicator';
 import { useIdleDetector } from '../hooks/useIdleDetector';
@@ -95,7 +95,7 @@ export function AppLayout() {
   ];
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden relative" style={{ zIndex: 1 }}>
       <ThemeLayer />
       <AnnouncementBanner />
 
@@ -130,6 +130,24 @@ export function AppLayout() {
           {user && (
             <div className="w-full border-t border-white/10 pt-3 px-2 mt-auto">
               <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider px-2 mb-1 hidden lg:block">Me</div>
+              <div className="hidden lg:flex flex-col gap-1 mb-2">
+                <Link
+                  to="/app/shop"
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-emerald-300 hover:text-white hover:bg-white/10 transition-all-custom"
+                  activeProps={{ className: 'bg-white/20 text-white' }}
+                >
+                  <Store size={18} />
+                  <span className="text-sm">Free Shop</span>
+                </Link>
+                <Link
+                  to="/app/settings/profile"
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all-custom"
+                  activeProps={{ className: 'bg-white/20 text-white' }}
+                >
+                  <Settings size={18} />
+                  <span className="text-sm">Settings</span>
+                </Link>
+              </div>
               <Link
                 to="/app/profile/$userId"
                 params={{ userId: user.id }}

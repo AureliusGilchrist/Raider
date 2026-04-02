@@ -24,9 +24,11 @@ func Init() {
 		log.Fatal("Failed to open database:", err)
 	}
 
-	// SQLite works best with a single connection; WAL allows concurrent reads
-	// but a pool > 1 can cause SQLITE_BUSY races on startup WAL recovery.
-	DB.SetMaxOpenConns(1)
+	// WAL mode allows concurrent reads.  Keep a small pool so readers
+	// never block behind a long-running writer.  _busy_timeout handles
+	// any transient SQLITE_BUSY from write contention.
+	DB.SetMaxOpenConns(4)
+	DB.SetMaxIdleConns(4)
 
 	if err = DB.Ping(); err != nil {
 		log.Fatal("Failed to ping database:", err)
@@ -401,6 +403,7 @@ func migrate() {
 		content TEXT NOT NULL,
 		encrypted INTEGER DEFAULT 0,
 		nonce BLOB,
+		reply_to_id TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		edited_at DATETIME
 	);
@@ -593,6 +596,8 @@ func migrate() {
 		`ALTER TABLE posts ADD COLUMN allow_share INTEGER DEFAULT 1`,
 		`ALTER TABLE posts ADD COLUMN allow_public_comments INTEGER DEFAULT 1`,
 		`ALTER TABLE server_settings ADD COLUMN allow_guests INTEGER DEFAULT 0`,
+		`ALTER TABLE server_settings ADD COLUMN default_slowmode INTEGER DEFAULT 0`,
+		`ALTER TABLE messages ADD COLUMN reply_to_id TEXT`,
 	}
 	for _, m := range additiveMigrations {
 		DB.Exec(m) // intentionally ignore error (column may already exist)

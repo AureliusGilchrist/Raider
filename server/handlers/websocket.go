@@ -133,11 +133,17 @@ func (h *WSHub) BroadcastToServer(serverID string, msg models.WSMessage) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
-	data, _ := json.Marshal(msg)
+	// Collect all user IDs first so we release the DB rows quickly.
+	var uids []string
 	for rows.Next() {
 		var uid string
 		rows.Scan(&uid)
+		uids = append(uids, uid)
+	}
+	rows.Close()
+
+	data, _ := json.Marshal(msg)
+	for _, uid := range uids {
 		h.mu.RLock()
 		client, ok := h.connections[uid]
 		h.mu.RUnlock()

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Shield, Trash2 } from 'lucide-react';
 import { servers as serversApi } from '../lib/api';
+import { raiderConfirm } from './CustomPopup';
 import { useAuthStore } from '../stores/authStore';
 
 interface Role {
@@ -83,7 +84,7 @@ export function RoleManager({ serverId, onClose }: RoleManagerProps) {
   };
 
   const handleDeleteRole = async (roleId: string) => {
-    if (!confirm('Delete this role?')) return;
+    if (!(await raiderConfirm('Delete this role?'))) return;
     try {
       await serversApi.deleteRole(serverId, roleId);
       setSelectedRole(null);

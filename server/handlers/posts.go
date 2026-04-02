@@ -416,6 +416,17 @@ func getPostByID(postID, viewerID string) (*models.Post, bool, error) {
 	return &p, true, nil
 }
 
+func GetPost(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	postID := chi.URLParam(r, "postID")
+	post, allowed, err := getPostByID(postID, userID)
+	if err != nil || post == nil || !allowed {
+		jsonError(w, "Post not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, http.StatusOK, post)
+}
+
 func GetPublicPost(w http.ResponseWriter, r *http.Request) {
 	postID := chi.URLParam(r, "postID")
 	viewerID := middleware.GetOptionalUserID(r)
@@ -466,7 +477,9 @@ func GetPublicPostComments(w http.ResponseWriter, r *http.Request) {
 	comments := []models.Comment{}
 	for rows.Next() {
 		var c models.Comment
-		rows.Scan(&c.ID, &c.PostID, &c.AuthorID, &c.ParentID, &c.Content, &c.Upvotes, &c.Downvotes, &c.CreatedAt, &c.EditedAt, &c.AuthorName, &c.UserVote)
+		if err := rows.Scan(&c.ID, &c.PostID, &c.AuthorID, &c.ParentID, &c.Content, &c.Upvotes, &c.Downvotes, &c.CreatedAt, &c.EditedAt, &c.AuthorName, &c.UserVote); err != nil {
+			continue
+		}
 		comments = append(comments, c)
 	}
 
@@ -491,7 +504,9 @@ func GetComments(w http.ResponseWriter, r *http.Request) {
 	comments := []models.Comment{}
 	for rows.Next() {
 		var c models.Comment
-		rows.Scan(&c.ID, &c.PostID, &c.AuthorID, &c.ParentID, &c.Content, &c.Upvotes, &c.Downvotes, &c.CreatedAt, &c.EditedAt, &c.AuthorName)
+		if err := rows.Scan(&c.ID, &c.PostID, &c.AuthorID, &c.ParentID, &c.Content, &c.Upvotes, &c.Downvotes, &c.CreatedAt, &c.EditedAt, &c.AuthorName); err != nil {
+			continue
+		}
 		comments = append(comments, c)
 	}
 
@@ -586,22 +601,21 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentID := generateID()
-	db.DB.Exec(`INSERT INTO comments (id, post_id, author_id, parent_id, content) VALUES (?, ?, ?, ?, ?)`,
+	_, err := db.DB.Exec(`INSERT INTO comments (id, post_id, author_id, parent_id, content) VALUES (?, ?, ?, ?, ?)`,
 		commentID, postID, userID, req.ParentID, req.Content)
+	if err != nil {
+		jsonError(w, "Failed to create comment", http.StatusInternalServerError)
+		return
+	}
 	db.DB.Exec("UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?", postID)
 	addXP(userID, 3)
 
-	var authorName string
-	db.DB.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&authorName)
-
-	comment := models.Comment{
-		ID:         commentID,
-		PostID:     postID,
-		AuthorID:   userID,
-		ParentID:   req.ParentID,
-		Content:    req.Content,
-		AuthorName: authorName,
-	}
+	// Read the comment back from DB to get actual created_at
+	var comment models.Comment
+	db.DB.QueryRow(`SELECT c.id, c.post_id, c.author_id, c.parent_id, c.content, c.upvotes, c.downvotes, c.created_at, c.edited_at, u.username
+		FROM comments c JOIN users u ON c.author_id = u.id WHERE c.id = ?`, commentID).Scan(
+		&comment.ID, &comment.PostID, &comment.AuthorID, &comment.ParentID, &comment.Content,
+		&comment.Upvotes, &comment.Downvotes, &comment.CreatedAt, &comment.EditedAt, &comment.AuthorName)
 
 	// Broadcast new comment
 	var commentCount int
@@ -623,14 +637,14 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 		if len(preview) > 60 {
 			preview = preview[:60] + "…"
 		}
-		CreateNotification(postAuthorID, "comment", authorName+" commented on your post", preview, "/app/timeline")
+		CreateNotification(postAuthorID, "comment", comment.AuthorName+" commented on your post", preview, "/app/timeline")
 	}
 	// If it's a reply, notify the parent comment author
 	if req.ParentID != nil {
 		var parentAuthorID string
 		db.DB.QueryRow("SELECT author_id FROM comments WHERE id = ?", *req.ParentID).Scan(&parentAuthorID)
 		if parentAuthorID != userID && parentAuthorID != postAuthorID {
-			CreateNotification(parentAuthorID, "reply", authorName+" replied to your comment", req.Content, "/app/timeline")
+			CreateNotification(parentAuthorID, "reply", comment.AuthorName+" replied to your comment", req.Content, "/app/timeline")
 		}
 	}
 

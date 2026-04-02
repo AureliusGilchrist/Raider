@@ -8,6 +8,7 @@ import (
 	"raider/db"
 	"raider/handlers"
 	"raider/middleware"
+	"raider/replication"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -17,6 +18,11 @@ import (
 func main() {
 	db.Init()
 	defer db.Close()
+
+	// Initialize replication (creates change-tracking triggers on primary)
+	replication.InitSchema()
+	// Start background sync loop on replica nodes
+	replication.StartReplicaSync()
 
 	os.MkdirAll("./uploads", 0755)
 
@@ -49,8 +55,15 @@ func main() {
 		r.Get("/ws", handlers.HandleWebSocket)
 	})
 
+	// Replication endpoints (API-key auth, no JWT)
+	r.Get("/api/replication/snapshot", replication.HandleSnapshot)
+	r.Get("/api/replication/changes", replication.HandleChanges)
+	r.Get("/api/replication/status", replication.HandleStatus)
+
 	// File serving
 	r.Get("/api/uploads/{userID}/{filename}", handlers.ServeUpload)
+	r.Get("/api/public/posts/{postID}", handlers.GetPublicPost)
+	r.Get("/api/public/posts/{postID}/comments", handlers.GetPublicPostComments)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -168,6 +181,7 @@ func main() {
 		// Posts
 		r.Get("/api/posts/timeline", handlers.GetTimeline)
 		r.Post("/api/posts", handlers.CreatePost)
+		r.Get("/api/posts/{postID}", handlers.GetPost)
 		r.Put("/api/posts/{postID}", handlers.EditPost)
 		r.Delete("/api/posts/{postID}", handlers.DeletePost)
 		r.Post("/api/posts/{postID}/vote", handlers.VotePost)

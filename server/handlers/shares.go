@@ -41,9 +41,14 @@ func ShareContent(w http.ResponseWriter, r *http.Request) {
 		// Check the post exists and get its server_id
 		var authorID string
 		var serverID *string
-		err := db.DB.QueryRow("SELECT author_id, server_id FROM posts WHERE id = ?", *req.PostID).Scan(&authorID, &serverID)
+		var allowShare bool
+		err := db.DB.QueryRow("SELECT author_id, server_id, allow_share FROM posts WHERE id = ?", *req.PostID).Scan(&authorID, &serverID, &allowShare)
 		if err != nil {
 			jsonError(w, "Post not found", http.StatusNotFound)
+			return
+		}
+		if !allowShare {
+			jsonError(w, "This post cannot be shared", http.StatusForbidden)
 			return
 		}
 		originalServerID = serverID
@@ -295,11 +300,13 @@ func resolveShareContent(s *models.Share, viewerID string) {
 	if s.ShareType == "post" && s.PostID != nil {
 		var p models.Post
 		err := db.DB.QueryRow(`SELECT p.id, p.author_id, p.server_id, p.title, p.content, p.media_url,
+			p.visibility, p.allow_share, p.allow_public_comments,
 			p.upvotes, p.downvotes, p.comment_count, p.created_at, u.username, u.avatar_url,
 			COALESCE((SELECT vote FROM post_votes WHERE post_id = p.id AND user_id = ?), 0)
 			FROM posts p JOIN users u ON p.author_id = u.id WHERE p.id = ?`,
 			viewerID, *s.PostID).Scan(
 			&p.ID, &p.AuthorID, &p.ServerID, &p.Title, &p.Content, &p.MediaURL,
+			&p.Visibility, &p.AllowShare, &p.AllowPublicComments,
 			&p.Upvotes, &p.Downvotes, &p.CommentCount, &p.CreatedAt,
 			&p.AuthorName, &p.AuthorAvatar, &p.UserVote)
 		if err == nil {

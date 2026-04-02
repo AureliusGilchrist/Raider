@@ -87,6 +87,10 @@ export const servers = {
   updateRole: (id: string, roleId: string, data: any) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteRole: (id: string, roleId: string) => request<any>(`/servers/${id}/roles/${roleId}`, { method: 'DELETE' }),
   memberRoles: (id: string, userId: string) => request<any[]>(`/servers/${id}/members/${userId}/roles`),
+  assignRole: (id: string, userId: string, roleId: string) =>
+    request<any>(`/servers/${id}/members/roles`, { method: 'POST', body: JSON.stringify({ user_id: userId, role_id: roleId }) }),
+  removeRole: (id: string, userId: string, roleId: string) =>
+    request<any>(`/servers/${id}/members/roles`, { method: 'DELETE', body: JSON.stringify({ user_id: userId, role_id: roleId }) }),
   // Server Announcements
   getAnnouncement: (id: string) => request<any>(`/servers/${id}/announcement`),
   getAnnouncements: (id: string) => request<any[]>(`/servers/${id}/announcements`),
@@ -99,6 +103,7 @@ export const servers = {
   // Audit logs, bans, invites
   auditLogs: (id: string) => request<any[]>(`/servers/${id}/audit-logs`),
   bans: (id: string) => request<any[]>(`/servers/${id}/bans`),
+  unban: (id: string, userId: string) => request<any>(`/servers/${id}/members/${userId}/unban`, { method: 'POST' }),
   invites: (id: string) => request<any[]>(`/servers/${id}/invites`),
   createInvite: (id: string, data?: any) => request<any>(`/servers/${id}/invites`, { method: 'POST', body: JSON.stringify(data || {}) }),
   deleteInvite: (code: string) => request<any>(`/invites/${code}`, { method: 'DELETE' }),
@@ -137,6 +142,9 @@ export const posts = {
     return request<any[]>(`/posts/timeline${params}`);
   },
   create: (data: any) => request<any>('/posts', { method: 'POST', body: JSON.stringify(data) }),
+  get: (postId: string) => request<any>(`/posts/${postId}`),
+  public: (postId: string) => request<any>(`/public/posts/${postId}`),
+  publicComments: (postId: string) => request<any[]>(`/public/posts/${postId}/comments`),
   vote: (postId: string, vote: number) =>
     request<any>(`/posts/${postId}/vote`, { method: 'POST', body: JSON.stringify({ vote }) }),
   edit: (postId: string, data: { title: string; content: string }) =>

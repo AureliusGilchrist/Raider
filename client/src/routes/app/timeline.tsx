@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { Link } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { Avatar } from '../../components/Avatar';
@@ -8,6 +8,7 @@ import type { Post, Share, Comment } from '../../lib/types';
 import { ArrowUp, ArrowDown, MessageCircle, Plus, Send, Share2, X, Repeat2, Pencil, Trash2, Check, HelpCircle, Image as ImageIcon } from 'lucide-react';
 import { FormattedText } from '../../components/FormattedText';
 import { FormatHelper } from '../../components/FormatHelper';
+import { raiderConfirm } from '../../components/CustomPopup';
 import { useWSStore } from '../../stores/wsStore';
 import { MediaViewer } from '../../components/MediaViewer';
 
@@ -101,7 +102,7 @@ function CommentThread({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this comment?')) return;
+    if (!(await raiderConfirm('Delete this comment?'))) return;
     try {
       await postsApi.deleteComment(postId, node.id);
       onDelete(node.id);
@@ -275,11 +276,22 @@ function InlineComments({ postId }: { postId: string }) {
   const [newComment, setNewComment] = useState('');
 
   useEffect(() => {
-    postsApi.comments(postId).then(setComments).catch(() => {}).finally(() => setLoading(false));
+    postsApi.comments(postId)
+      .then(data => setComments(data || []))
+      .catch(err => console.error('Failed to load comments for post', postId, err))
+      .finally(() => setLoading(false));
   }, [postId]);
 
   // Real-time WS updates for comments
   useEffect(() => {
+    const unsubNew = on('post_comment', (msg) => {
+      const { post_id, comment } = msg.payload;
+      if (post_id !== postId || !comment) return;
+      setComments(prev => {
+        if (prev.some(c => c.id === comment.id)) return prev;
+        return [...prev, comment];
+      });
+    });
     const unsubEdited = on('comment_edited', (msg) => {
       const { post_id, comment } = msg.payload;
       if (post_id !== postId) return;
@@ -290,7 +302,7 @@ function InlineComments({ postId }: { postId: string }) {
       if (post_id !== postId) return;
       setComments(prev => prev.filter(c => c.id !== comment_id));
     });
-    return () => { unsubEdited(); unsubDeleted(); };
+    return () => { unsubNew(); unsubEdited(); unsubDeleted(); };
   }, [on, postId]);
 
   const handleAdd = (c: Comment) => {
@@ -378,6 +390,10 @@ export function TimelinePage() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [postVisibility, setPostVisibility] = useState<'followers' | 'logged_in' | 'public'>('followers');
+  const [allowShare, setAllowShare] = useState(true);
+  const [allowPublicComments, setAllowPublicComments] = useState(true);
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<{ type: 'post'; id: string } | null>(null);
   const [shareComment, setShareComment] = useState('');
   const [editingPost, setEditingPost] = useState<string | null>(null);
@@ -386,6 +402,31 @@ export function TimelinePage() {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [votingPosts, setVotingPosts] = useState<Set<string>>(new Set());
   const votingPostsRef = useRef(inFlightVotes);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Save scroll position on unmount
+  useEffect(() => {
+    return () => {
+      const container = document.querySelector('main');
+      if (container) {
+        sessionStorage.setItem('timeline_scroll', String(container.scrollTop));
+      }
+    };
+  }, []);
+
+  // Restore scroll position after data loads
+  useEffect(() => {
+    if (!loading && items.length > 0) {
+      const saved = sessionStorage.getItem('timeline_scroll');
+      if (saved) {
+        requestAnimationFrame(() => {
+          const container = document.querySelector('main');
+          if (container) container.scrollTop = Number(saved);
+          sessionStorage.removeItem('timeline_scroll');
+        });
+      }
+    }
+  }, [loading, items.length > 0]);
 
   useEffect(() => {
     setLoading(true);
@@ -464,12 +505,30 @@ export function TimelinePage() {
         const uploadRes = await uploadsApi.upload(file);
         if (uploadRes?.url) mediaUrls.push(uploadRes.url);
       }
-      const post = await postsApi.create({ title, content, media_urls: mediaUrls });
+      const post = await postsApi.create({
+        title,
+        content,
+        media_urls: mediaUrls,
+        visibility: postVisibility,
+        allow_share: allowShare,
+        allow_public_comments: allowPublicComments,
+      });
       setItems((prev) => [post, ...prev]);
       setTitle('');
       setContent('');
       setMediaFiles([]);
+      setPostVisibility('followers');
+      setAllowShare(true);
+      setAllowPublicComments(true);
       setShowCreate(false);
+    } catch {}
+  };
+
+  const handleCopyPostLink = async (postId: string) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/p/${postId}`);
+      setCopiedPostId(postId);
+      window.setTimeout(() => setCopiedPostId((current) => (current === postId ? null : current)), 1800);
     } catch {}
   };
 
@@ -500,7 +559,7 @@ export function TimelinePage() {
   };
 
   const handleDelete = async (postId: string) => {
-    if (!confirm('Delete this post?')) return;
+    if (!(await raiderConfirm('Delete this post?'))) return;
     try {
       await postsApi.delete(postId);
       setItems((prev) => prev.filter((p) => p.id !== postId));
@@ -526,47 +585,71 @@ export function TimelinePage() {
     <div className="max-w-2xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">Timeline</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex bg-white/10 rounded-lg p-1">
-            <button
-              onClick={() => setAlgorithm('for-you')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all-custom ${
-                algorithm === 'for-you' ? 'bg-indigo-500 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              For You
-            </button>
-            <button
-              onClick={() => setAlgorithm('chronological')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all-custom ${
-                algorithm === 'chronological' ? 'bg-indigo-500 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Latest
-            </button>
-          </div>
-          <button onClick={() => setShowCreate(!showCreate)} className="btn btn-primary">
-            <Plus size={16} /> Post
-          </button>
-        </div>
       </div>
 
-      {showCreate && (
-        <GlassPanel className="p-4 mb-6 animate-slide-up">
-          <form onSubmit={handleCreate} className="flex flex-col gap-3">
-            <input
-              type="text"
-              placeholder="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-            <textarea
-              placeholder="What's on your mind?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={3}
-            />
+      {/* Algorithm tabs - theme-aware */}
+      <div className="flex gap-1 mb-4 glass rounded-xl p-1">
+        <button
+          onClick={() => setAlgorithm('for-you')}
+          className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all-custom ${
+            algorithm === 'for-you'
+              ? 'bg-[var(--accent-color)] text-white shadow-lg shadow-[var(--accent-color)]/20'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          For You
+        </button>
+        <button
+          onClick={() => setAlgorithm('chronological')}
+          className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all-custom ${
+            algorithm === 'chronological'
+              ? 'bg-[var(--accent-color)] text-white shadow-lg shadow-[var(--accent-color)]/20'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          Latest
+        </button>
+      </div>
+
+      {/* Compose area - always visible at top like Twitter */}
+      <GlassPanel className="p-4 mb-6">
+        <form onSubmit={handleCreate} className="flex flex-col gap-3">
+          <input
+            type="text"
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onFocus={() => setShowCreate(true)}
+            required
+          />
+          <textarea
+            placeholder="What's on your mind?"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onFocus={() => setShowCreate(true)}
+            rows={showCreate ? 3 : 1}
+            className="transition-all duration-200"
+          />
+          {showCreate && (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Who can open the link?</label>
+                <select value={postVisibility} onChange={(e) => setPostVisibility(e.target.value as 'followers' | 'logged_in' | 'public')}>
+                  <option value="followers">Followers only</option>
+                  <option value="logged_in">Signed-in users</option>
+                  <option value="public">Public</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-300 bg-white/5 rounded-lg px-3 py-2 border border-white/10">
+                <input type="checkbox" checked={allowShare} onChange={(e) => setAllowShare(e.target.checked)} />
+                Others can share this post
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-300 bg-white/5 rounded-lg px-3 py-2 border border-white/10">
+                <input type="checkbox" checked={allowPublicComments} onChange={(e) => setAllowPublicComments(e.target.checked)} />
+                Logged-out visitors can open comments
+              </label>
+            </div>
             {mediaFiles.length > 0 && (
               <div className="flex gap-2 flex-wrap">
                 {mediaFiles.map((f, i) => (
@@ -598,9 +681,17 @@ export function TimelinePage() {
                 <Send size={14} /> Post
               </button>
             </div>
-          </form>
-        </GlassPanel>
-      )}
+            </>
+          )}
+          {!showCreate && (
+            <div className="flex items-center justify-end">
+              <button type="submit" className="btn btn-primary">
+                <Send size={14} /> Post
+              </button>
+            </div>
+          )}
+        </form>
+      </GlassPanel>
 
       {/* Share dialog */}
       {shareTarget && (
@@ -661,7 +752,13 @@ export function TimelinePage() {
                         </Link>
                         {s.post.edited_at && <span className="text-[10px] text-gray-600">(Edited)</span>}
                       </div>
-                      <h4 className="text-white font-semibold text-sm">{s.post.title}</h4>
+                      <button
+                        onClick={() => handleCopyPostLink(s.post!.id)}
+                        className="text-white font-semibold text-sm text-left hover:text-indigo-300 transition-all-custom"
+                        title="Copy public link"
+                      >
+                        {s.post.title}
+                      </button>
                       <p className="text-gray-400 text-xs mt-1"><FormattedText text={s.post.content} /></p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                         <span><ArrowUp size={12} className="inline" /> {s.post.upvotes - s.post.downvotes}</span>
@@ -758,11 +855,13 @@ export function TimelinePage() {
                           type="text"
                           value={editTitle}
                           onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleEdit(post.id)}
                           className="text-sm"
                         />
                         <textarea
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEdit(post.id); } }}
                           rows={2}
                           className="text-sm"
                         />
@@ -777,7 +876,15 @@ export function TimelinePage() {
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-white font-semibold mb-1">{post.title}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Link
+                            to="/app/post/$postId"
+                            params={{ postId: post.id }}
+                            className="text-white font-semibold text-left hover:text-indigo-300 transition-all-custom"
+                          >
+                            {post.title}
+                          </Link>
+                        </div>
                         <p className="text-gray-300 text-sm"><FormattedText text={post.content} /></p>
                         {post.media_urls && post.media_urls.length > 0 && <MediaViewer urls={post.media_urls} />}
                       </>
@@ -792,9 +899,10 @@ export function TimelinePage() {
                       </button>
                       <button
                         onClick={() => setShareTarget({ type: 'post', id: post.id })}
+                        disabled={post.allow_share === false}
                         className="flex items-center gap-1 hover:text-green-400 transition-all-custom"
                       >
-                        <Share2 size={14} /> Share
+                        <Share2 size={14} /> {post.allow_share === false ? 'Sharing off' : 'Share'}
                       </button>
                     </div>
 

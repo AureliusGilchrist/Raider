@@ -225,6 +225,26 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Status message must be under 200 characters", http.StatusBadRequest)
 		return
 	}
+	if req.Username != nil {
+		username := *req.Username
+		if len(username) < 3 || len(username) > 30 {
+			jsonError(w, "Username must be between 3 and 30 characters", http.StatusBadRequest)
+			return
+		}
+		for _, c := range username {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.') {
+				jsonError(w, "Username can only contain letters, numbers, underscores, and dots", http.StatusBadRequest)
+				return
+			}
+		}
+		var existingID string
+		err := db.DB.QueryRow("SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?", username, userID).Scan(&existingID)
+		if err == nil {
+			jsonError(w, "Username is already taken", http.StatusConflict)
+			return
+		}
+		db.DB.Exec("UPDATE users SET username = ? WHERE id = ?", username, userID)
+	}
 
 	if req.DisplayName != nil {
 		db.DB.Exec("UPDATE users SET display_name = ? WHERE id = ?", *req.DisplayName, userID)

@@ -139,7 +139,7 @@ export function DMConversationPage() {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-white/10">
+      <div className={`p-3 border-t border-white/10 ${(() => { const fx = localStorage.getItem('raider_chatbar_effect'); return fx && fx !== 'none' ? `chatbar-effect-${fx}` : ''; })()}`}>
         <div className="flex gap-2">
           <input
             type="text"

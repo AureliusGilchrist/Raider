@@ -263,6 +263,7 @@ export interface ServerSettings {
   banner_url: string;
   discovery_splash_url: string;
   allow_guests?: boolean;
+  default_slowmode?: number;
 }
 
 export interface WSMessage {

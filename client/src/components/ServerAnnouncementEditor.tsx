@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Megaphone, Clock, Palette } from 'lucide-react';
 import { servers as serversApi } from '../lib/api';
+import { raiderConfirm } from './CustomPopup';
 
 interface ServerAnnouncementEditorProps {
   serverId: string;
@@ -68,7 +69,7 @@ export function ServerAnnouncementEditor({ serverId, onClose, existingAnnounceme
 
   const handleDelete = async () => {
     if (!existingAnnouncement?.id) return;
-    if (!confirm('Delete this announcement?')) return;
+    if (!(await raiderConfirm('Delete this announcement?'))) return;
 
     setSaving(true);
     try {

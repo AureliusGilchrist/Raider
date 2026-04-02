@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+﻿import React, { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 
-/* ─── Space: star field ─────────────────────────────────────────── */
+/* â”€â”€â”€ Space: merged star field + volumetric nebula â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function SpaceLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -18,7 +18,33 @@ function SpaceLayer() {
     resize();
     window.addEventListener('resize', resize);
 
-    // Generate stars with position, size, speed, and initial phase
+    // Perlin noise for volumetric nebula clouds
+    const perm = new Uint8Array(512);
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+    const fade = (tt: number) => tt * tt * tt * (tt * (tt * 6 - 15) + 10);
+    const nlerp = (a: number, b: number, tt: number) => a + tt * (b - a);
+    const grad2 = (hash: number, x: number, y: number) => {
+      const h = hash & 3;
+      return (h === 0 ? x + y : h === 1 ? -x + y : h === 2 ? x - y : -x - y);
+    };
+    const noise2D = (x: number, y: number) => {
+      const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+      const xf = x - Math.floor(x), yf = y - Math.floor(y);
+      const u = fade(xf), v = fade(yf);
+      const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1];
+      const ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
+      return nlerp(nlerp(grad2(aa, xf, yf), grad2(ba, xf - 1, yf), u), nlerp(grad2(ab, xf, yf - 1), grad2(bb, xf - 1, yf - 1), u), v);
+    };
+    const fbm = (x: number, y: number, octaves: number) => {
+      let val = 0, amp = 0.5, freq = 1;
+      for (let i = 0; i < octaves; i++) { val += amp * noise2D(x * freq, y * freq); amp *= 0.5; freq *= 2; }
+      return val;
+    };
+
+    // Stars with color variety
     const STAR_COUNT = 320;
     type Star = { x: number; y: number; r: number; speed: number; phase: number; color: string };
     const COLORS = ['#ffffff', '#ccd6f6', '#aac4ff', '#ffd6d6', '#ffe9b3', '#d6ffe8'];
@@ -26,22 +52,20 @@ function SpaceLayer() {
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       r: Math.random() * 1.6 + 0.3,
-      speed: Math.random() * 0.008 + 0.002, // twinkle speed
+      speed: Math.random() * 0.008 + 0.002,
       phase: Math.random() * Math.PI * 2,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
     }));
 
-    // Billowing nebula clouds
-    type Nebula = { cx: number; cy: number; rx: number; ry: number; hue: number; sat: number; alpha: number; phase: number };
-    const NEBULA_HUES = [270, 195, 315, 240, 290, 210];
-    const nebulas: Nebula[] = Array.from({ length: 6 }, (_, i) => ({
-      cx: Math.random() * window.innerWidth,
-      cy: Math.random() * window.innerHeight,
-      rx: 280 + Math.random() * 320,
-      ry: 140 + Math.random() * 200,
-      hue: NEBULA_HUES[i],
-      sat: 60 + Math.random() * 30,
-      alpha: 0.030 + Math.random() * 0.048,
+    // Volumetric nebula regions (from Nebula theme â€” fbm-based clouds)
+    type NebulaRegion = { cx: number; cy: number; r: number; hue1: number; hue2: number; drift: number; phase: number };
+    const regions: NebulaRegion[] = Array.from({ length: 5 }, (_, i) => ({
+      cx: (0.15 + Math.random() * 0.7) * window.innerWidth,
+      cy: (0.15 + Math.random() * 0.7) * window.innerHeight,
+      r: 0.2 + Math.random() * 0.25,
+      hue1: [270, 195, 315, 240, 200][i],
+      hue2: [310, 230, 280, 290, 260][i],
+      drift: 0.02 + Math.random() * 0.04,
       phase: Math.random() * Math.PI * 2,
     }));
 
@@ -50,34 +74,100 @@ function SpaceLayer() {
     const shoots: Shoot[] = [];
     let lastShoot = 0;
 
+    // Distant galaxies
+    type Galaxy = { cx: number; cy: number; r: number; angle: number; rotSpeed: number; hue: number; alpha: number };
+    const galaxies: Galaxy[] = Array.from({ length: 3 }, () => ({
+      cx: Math.random() * window.innerWidth,
+      cy: Math.random() * window.innerHeight,
+      r: 40 + Math.random() * 60,
+      angle: Math.random() * Math.PI * 2,
+      rotSpeed: 0.0005 + Math.random() * 0.001,
+      hue: [220, 280, 330][Math.floor(Math.random() * 3)],
+      alpha: 0.06 + Math.random() * 0.05,
+    }));
+
+    // Cosmic dust particles
+    type Dust = { x: number; y: number; r: number; vx: number; vy: number; alpha: number; hue: number };
+    const dustCount = 60;
+    const dust: Dust[] = Array.from({ length: dustCount }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: 0.5 + Math.random() * 1.2,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.1,
+      alpha: 0.15 + Math.random() * 0.25,
+      hue: 200 + Math.random() * 60,
+    }));
+
+    // Constellation lines between nearby stars
+    const constellations: [number, number][] = [];
+    for (let i = 0; i < Math.min(stars.length, 80); i++) {
+      for (let j = i + 1; j < Math.min(stars.length, 80); j++) {
+        const dx = stars[i].x - stars[j].x;
+        const dy = stars[i].y - stars[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120 && constellations.length < 30) {
+          constellations.push([i, j]);
+        }
+      }
+    }
+
     let t = 0;
     const draw = (ts: number) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      t += 0.016;
+      t += 0.004;
+      const w = canvas.width, h = canvas.height;
+      const scale = Math.min(w, h);
 
-      // Nebulas - billowing clouds drawn behind stars
-      for (const n of nebulas) {
-        n.phase += 0.0018;
-        const nx = n.cx + Math.sin(n.phase * 0.8) * 40;
-        const ny = n.cy + Math.cos(n.phase * 0.6) * 25;
-        ctx.save();
-        ctx.translate(nx, ny);
-        ctx.scale(1, n.ry / n.rx);
-        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, n.rx);
-        grad.addColorStop(0,    `hsla(${n.hue},${n.sat}%,65%,${n.alpha.toFixed(3)})`);
-        grad.addColorStop(0.3,  `hsla(${n.hue + 22},${n.sat}%,55%,${(n.alpha * 0.65).toFixed(3)})`);
-        grad.addColorStop(0.65, `hsla(${n.hue - 15},${n.sat - 15}%,45%,${(n.alpha * 0.28).toFixed(3)})`);
-        grad.addColorStop(1,    `hsla(${n.hue},${n.sat}%,40%,0)`);
+      // Volumetric nebula clouds (fbm noise-based, drawn first as background)
+      for (const reg of regions) {
+        const cx = reg.cx + Math.sin(t * reg.drift + reg.phase) * scale * 0.03;
+        const cy = reg.cy + Math.cos(t * reg.drift * 0.7 + reg.phase) * scale * 0.02;
+        const cloudR = reg.r * scale;
+
+        for (let layer = 0; layer < 4; layer++) {
+          const layerOffset = layer * 0.3;
+          const layerScale = 1 - layer * 0.08;
+          const layerAlpha = (0.035 - layer * 0.006);
+          const noiseScale = 0.003 + layer * 0.001;
+          const step = 8;
+
+          for (let py = cy - cloudR; py < cy + cloudR; py += step) {
+            for (let px = cx - cloudR; px < cx + cloudR; px += step) {
+              const dx = px - cx, dy = py - cy;
+              const dist = Math.sqrt(dx * dx + dy * dy) / (cloudR * layerScale);
+              if (dist > 1) continue;
+
+              const n = fbm(px * noiseScale + t * 0.5 + layerOffset, py * noiseScale + t * 0.3, 4);
+              const density = Math.max(0, (1 - dist * dist) * (0.5 + n * 0.6));
+              if (density < 0.01) continue;
+
+              const hueBlend = (n + 1) * 0.5;
+              const hue = reg.hue1 + (reg.hue2 - reg.hue1) * hueBlend + t * 3;
+              const sat = 60 + density * 30;
+              const lum = 35 + density * 25;
+              const a = density * layerAlpha;
+
+              ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lum}%, ${a})`;
+              ctx.fillRect(px - step / 2, py - step / 2, step, step);
+            }
+          }
+        }
+
+        // Nebula core glow
+        const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, cloudR * 0.4);
+        coreGlow.addColorStop(0, `hsla(${reg.hue1 + t * 5}, 80%, 65%, 0.04)`);
+        coreGlow.addColorStop(0.5, `hsla(${reg.hue2 + t * 3}, 60%, 50%, 0.015)`);
+        coreGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = coreGlow;
         ctx.beginPath();
-        ctx.arc(0, 0, n.rx, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
+        ctx.arc(cx, cy, cloudR * 0.4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
       }
 
-      // Regular stars
+      // Twinkling stars
       for (const s of stars) {
-        const alpha = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.phase + t * s.speed * 60));
+        const alpha = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.phase + t * s.speed * 250));
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fillStyle = s.color + Math.round(alpha * 255).toString(16).padStart(2, '0');
@@ -88,7 +178,7 @@ function SpaceLayer() {
       if (ts - lastShoot > 2800 + Math.random() * 2000) {
         lastShoot = ts;
         shoots.push({
-          x: Math.random() * canvas.width * 1.5,
+          x: Math.random() * w * 1.5,
           y: -20,
           vx: -2.5 - Math.random() * 3,
           vy: 2 + Math.random() * 3,
@@ -116,6 +206,64 @@ function SpaceLayer() {
         if (sh.life >= sh.maxLife) shoots.splice(i, 1);
       }
 
+      // Distant galaxies - spiral shapes
+      for (const g of galaxies) {
+        g.angle += g.rotSpeed;
+        ctx.save();
+        ctx.translate(g.cx, g.cy);
+        ctx.rotate(g.angle);
+        for (let arm = 0; arm < 3; arm++) {
+          const armAngle = (arm * Math.PI * 2) / 3;
+          ctx.beginPath();
+          for (let pp = 0; pp < 40; pp++) {
+            const dist = (pp / 40) * g.r;
+            const spiral = armAngle + (pp / 40) * Math.PI * 1.5;
+            const px = Math.cos(spiral) * dist;
+            const py = Math.sin(spiral) * dist;
+            if (pp === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.strokeStyle = `hsla(${g.hue},60%,70%,${(g.alpha * (0.7 + 0.3 * Math.sin(t * 2))).toFixed(3)})`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+        // Galaxy core glow
+        const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, g.r * 0.3);
+        coreGrad.addColorStop(0, `hsla(${g.hue},50%,80%,${(g.alpha * 1.5).toFixed(3)})`);
+        coreGrad.addColorStop(1, `hsla(${g.hue},50%,60%,0)`);
+        ctx.beginPath();
+        ctx.arc(0, 0, g.r * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = coreGrad;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Cosmic dust
+      for (const d of dust) {
+        d.x += d.vx;
+        d.y += d.vy;
+        if (d.x < 0) d.x = w;
+        if (d.x > w) d.x = 0;
+        if (d.y < 0) d.y = h;
+        if (d.y > h) d.y = 0;
+        const da = d.alpha * (0.6 + 0.4 * Math.sin(t * 3 + d.x));
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${d.hue},40%,75%,${da.toFixed(3)})`;
+        ctx.fill();
+      }
+
+      // Constellation lines
+      const constAlpha = 0.06 + 0.04 * Math.sin(t * 1.5);
+      ctx.strokeStyle = `rgba(180,200,255,${constAlpha.toFixed(3)})`;
+      ctx.lineWidth = 0.5;
+      for (const [i, j] of constellations) {
+        ctx.beginPath();
+        ctx.moveTo(stars[i].x, stars[i].y);
+        ctx.lineTo(stars[j].x, stars[j].y);
+        ctx.stroke();
+      }
+
       rafRef.current = requestAnimationFrame(draw);
     };
 
@@ -130,14 +278,14 @@ function SpaceLayer() {
     <canvas
       ref={canvasRef}
       style={{
-        position: 'fixed', inset: 0, zIndex: -1,
+        position: 'fixed', inset: 0, zIndex: 0,
         pointerEvents: 'none',
       }}
     />
   );
 }
 
-/* ─── Ocean ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Ocean â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function OceanLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -153,13 +301,24 @@ function OceanLayer() {
     type Bubble = { x: number; y: number; r: number; speed: number; wobbleAmp: number; phase: number };
     type Weed   = { x: number; height: number; segs: number; phase: number; hue: number; thickness: number };
     type Ray    = { x: number; angle: number; phase: number; width: number };
+    type Bloom  = { x: number; y: number; rx: number; ry: number; phase: number; alpha: number; hue: number };
 
     /* ---- Caustic rays ---- */
     const rays: Ray[] = Array.from({ length: 7 }, (_, i) => ({
       x: (canvas.width / 7) * i + canvas.width / 14,
       angle: -0.15 + Math.random() * 0.3,
       phase: Math.random() * Math.PI * 2,
-      width: 30 + Math.random() * 60,
+      width: 90 + Math.random() * 120,
+    }));
+
+    const blooms: Bloom[] = Array.from({ length: 6 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * (window.innerHeight * 0.6),
+      rx: 140 + Math.random() * 220,
+      ry: 70 + Math.random() * 160,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.05 + Math.random() * 0.06,
+      hue: 188 + Math.random() * 28,
     }));
 
     /* ---- Bubbles ---- */
@@ -186,19 +345,50 @@ function OceanLayer() {
 
     const drawRays = () => {
       for (const r of rays) {
-        const drift = Math.sin(r.phase + t * 0.18) * 40;
+        const drift = Math.sin(r.phase + t * 0.1) * 120;
         const rx = r.x + drift;
-        const grad = ctx.createLinearGradient(rx, 0, rx + r.width * 0.3, canvas.height * 0.55);
-        grad.addColorStop(0, 'rgba(120,210,255,0.07)');
-        grad.addColorStop(1, 'rgba(120,210,255,0)');
         ctx.save();
         ctx.translate(rx, 0);
-        ctx.rotate(r.angle + Math.sin(r.phase + t * 0.1) * 0.06);
+        const sway = Math.sin(r.phase + t * 0.07) * 0.12;
+        ctx.rotate(r.angle + sway);
+        ctx.filter = 'blur(22px)';
+        // Multi-stop gradient for realistic volumetric feel
+        const grad = ctx.createLinearGradient(0, -20, 0, canvas.height * 0.85);
+        const pulse = 0.8 + 0.2 * Math.sin(r.phase + t * 0.12);
+        grad.addColorStop(0, `rgba(200,245,255,${(0.22 * pulse).toFixed(3)})`);
+        grad.addColorStop(0.08, `rgba(180,240,255,${(0.18 * pulse).toFixed(3)})`);
+        grad.addColorStop(0.3, `rgba(140,225,255,${(0.12 * pulse).toFixed(3)})`);
+        grad.addColorStop(0.6, `rgba(80,195,240,${(0.06 * pulse).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(50,160,220,0)');
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-r.width / 2, canvas.height * 0.55);
-        ctx.lineTo(r.width / 2, canvas.height * 0.55);
+        // Wider at the bottom, tapered at top for natural light cone
+        const topW = r.width * 0.3;
+        const botW = r.width * 1.6;
+        ctx.moveTo(-topW / 2, -20);
+        ctx.lineTo(-botW / 2, canvas.height * 0.85);
+        ctx.lineTo(botW / 2, canvas.height * 0.85);
+        ctx.lineTo(topW / 2, -20);
         ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+      }
+    };
+
+    const drawBlooms = () => {
+      for (const bloom of blooms) {
+        const bx = bloom.x + Math.sin(bloom.phase + t * 0.22) * 45;
+        const by = bloom.y + Math.cos(bloom.phase + t * 0.18) * 18;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.scale(1, bloom.ry / bloom.rx);
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, bloom.rx);
+        grad.addColorStop(0, `hsla(${bloom.hue}, 92%, 78%, ${bloom.alpha.toFixed(3)})`);
+        grad.addColorStop(0.45, `hsla(${bloom.hue + 8}, 88%, 68%, ${(bloom.alpha * 0.5).toFixed(3)})`);
+        grad.addColorStop(1, `hsla(${bloom.hue + 18}, 80%, 60%, 0)`);
+        ctx.filter = 'blur(36px)';
+        ctx.beginPath();
+        ctx.arc(0, 0, bloom.rx, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
         ctx.restore();
@@ -258,10 +448,13 @@ function OceanLayer() {
     };
 
     const draw = () => {
-      t += 0.0145;
+      t += 0.022;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBlooms();
       drawRays();
+      ctx.filter = 'blur(1.5px)';
       for (const w of weeds) drawWeed(w);
+      ctx.filter = 'none';
       for (const b of bubbles) {
         b.y -= b.speed;
         drawBubble(b);
@@ -276,7 +469,7 @@ function OceanLayer() {
   return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none', filter: 'saturate(0.55)' }} />;
 }
 
-/* ─── Aurora ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Aurora â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function AuroraLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -291,7 +484,7 @@ function AuroraLayer() {
 
     // Aurora is modeled as multiple overlapping vertical curtains made from
     // sinusoidal columns of color. Each band has its own base hue, speed,
-    // wavelength and vertical extent — producing the characteristic rippling
+    // wavelength and vertical extent â€” producing the characteristic rippling
     // curtain of green/cyan/violet light that real auroras show.
     type Band = {
       baseX: number;     // horizontal anchor (0..1 of width)
@@ -342,11 +535,11 @@ function AuroraLayer() {
       ctx.save();
       for (let col = 0; col < COLS; col++) {
         const xFrac = col / COLS;
-        // Gaussian envelope — band fades to 0 at its edges
+        // Gaussian envelope â€” band fades to 0 at its edges
         const dx = xFrac - b.baseX;
         const envelope = Math.exp(-(dx * dx) / (b.width * b.width * 0.5));
 
-        // Horizontal wave distortion — each column's top shifts sinusoidally
+        // Horizontal wave distortion â€” each column's top shifts sinusoidally
         const xShift = Math.sin(b.phase + xFrac * b.waveFreq * Math.PI * 2 + t * b.speedWave) * b.waveAmp * H;
 
         const topY  = b.topFrac * H + xShift;
@@ -404,10 +597,10 @@ function AuroraLayer() {
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
-/* ─── Lava ────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Lava â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function LavaLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -443,7 +636,7 @@ function LavaLayer() {
       vx: (Math.random() - 0.5) * 0.25,
       vy: -(0.04 + Math.random() * 0.18),   // rises slowly
       r: 18 + Math.random() * 28,
-      hue: 4 + Math.random() * 28,           // deep red → orange-red
+      hue: 4 + Math.random() * 28,           // deep red â†’ orange-red
       life: spawnAtBottom ? 0.05 : 0.5 + Math.random() * 0.5,
       dLife: 0.002 + Math.random() * 0.004,
     });
@@ -494,7 +687,7 @@ function LavaLayer() {
           if (field >= THRESHOLD) {
             const intensity = Math.min(1, (field - THRESHOLD) / 0.6);
             const hue = hueWeight > 0 ? hueAccum / hueWeight : 10;
-            // Map hue + intensity to RGB: dark red → orange → bright yellow-white at core
+            // Map hue + intensity to RGB: dark red â†’ orange â†’ bright yellow-white at core
             const lightness = 20 + intensity * 65;
             const sat = 95 - intensity * 20;
             // Convert HSL manually (simple approximation)
@@ -576,10 +769,10 @@ function LavaLayer() {
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
-/* ─── Matrix ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Matrix â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function MatrixLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -596,8 +789,8 @@ function MatrixLayer() {
     window.addEventListener('resize', resize);
 
     // Katakana + digits + latin that appear in the film
-    const CHARS = 'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789ABCDEFZ:<>=|_-';
-    const FONT_SIZE = 16;
+    const CHARS = 'ï½¦ï½§ï½¨ï½©ï½ªï½«ï½¬ï½­ï½®ï½¯ï½°ï½±ï½²ï½³ï½´ï½µï½¶ï½·ï½¸ï½¹ï½ºï½»ï½¼ï½½ï½¾ï½¿ï¾€ï¾ï¾‚ï¾ƒï¾„ï¾…ï¾†ï¾‡ï¾ˆï¾‰ï¾Šï¾‹ï¾Œï¾ï¾Žï¾ï¾ï¾‘ï¾’ï¾“ï¾”ï¾•ï¾–ï¾—ï¾˜ï¾™ï¾šï¾›ï¾œï¾0123456789ABCDEFZ:<>=|_-';
+    const FONT_SIZE = 32;
 
     type Column = {
       x: number;
@@ -658,7 +851,7 @@ function MatrixLayer() {
 
           const ch = col.chars[j % col.chars.length];
           if (j === 0) {
-            // Head glyph — bright white/light-green
+            // Head glyph â€” bright white/light-green
             ctx.fillStyle = 'rgba(220,255,220,0.95)';
           } else {
             // Trail: fade from bright green at head to dark at tail
@@ -685,10 +878,10 @@ function MatrixLayer() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
-/* ─── Sakura ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sakura â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function SakuraLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -737,7 +930,7 @@ function SakuraLayer() {
 
     const petals: Petal[] = Array.from({ length: PETAL_COUNT }, () => makePetal(false));
 
-    // Single realistic petal — an almond/teardrop with a faint centre vein
+    // Single realistic petal â€” an almond/teardrop with a faint centre vein
     const drawPetal = (p: Petal) => {
       // cos(flipAngle) simulates the petal spinning around its long axis in 3-D
       const flipCos = Math.cos(p.flipAngle);
@@ -767,7 +960,7 @@ function SakuraLayer() {
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Subtle vein — only visible when petal faces us
+      // Subtle vein â€” only visible when petal faces us
       const veinAlpha = 0.20 * Math.abs(flipCos);
       if (veinAlpha > 0.03) {
         ctx.beginPath();
@@ -788,12 +981,12 @@ function SakuraLayer() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (const p of petals) {
-        // Pendulum sway: velocity = derivative of A·sin(ωt+φ) = A·ω·cos(ωt+φ)
+        // Pendulum sway: velocity = derivative of AÂ·sin(Ï‰t+Ï†) = AÂ·Ï‰Â·cos(Ï‰t+Ï†)
         const swayVx = p.swayAmp * p.swayFreq * Math.cos(p.phase + t * p.swayFreq);
         p.x += p.vx + swayVx;
         p.y += p.vy;
 
-        // Tilt follows the sway direction — leading edge dips as petal swings
+        // Tilt follows the sway direction â€” leading edge dips as petal swings
         p.tilt = Math.sin(p.phase + t * p.swayFreq) * 0.28;
 
         p.flipAngle += p.flipSpeed;
@@ -810,11 +1003,11 @@ function SakuraLayer() {
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
 
-/* ─── Deep Sea ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Deep Sea â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function DeepSeaLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -827,12 +1020,12 @@ function DeepSeaLayer() {
     resize();
     window.addEventListener('resize', resize);
 
-    /* ── types ── */
+    /* â”€â”€ types â”€â”€ */
     type Particle = { x: number; y: number; r: number; speed: number; drift: number; phase: number; alpha: number };
     type Weed  = { x: number; height: number; segs: number; phase: number; hue: number; thickness: number };
     type Ray   = { x: number; angle: number; phase: number; width: number };
 
-    /* ── Bioluminescent drifting particles ── */
+    /* â”€â”€ Bioluminescent drifting particles â”€â”€ */
     const particles: Particle[] = Array.from({ length: 140 }, () => ({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
@@ -843,17 +1036,17 @@ function DeepSeaLayer() {
       alpha: 0.2 + Math.random() * 0.55,
     }));
 
-    /* ── Sparse deep-sea seaweed / coral stalks ── */
+    /* â”€â”€ Sparse deep-sea seaweed / coral stalks â”€â”€ */
     const weeds: Weed[] = Array.from({ length: 12 }, () => ({
       x: 20 + Math.random() * (window.innerWidth - 40),
       height: 40 + Math.random() * 100,
       segs: 6 + Math.floor(Math.random() * 5),
       phase: Math.random() * Math.PI * 2,
-      hue: 175 + Math.random() * 60,   // teal → indigo
+      hue: 175 + Math.random() * 60,   // teal â†’ indigo
       thickness: 1.5 + Math.random() * 2.5,
     }));
 
-    /* ── Very faint downward light rays from far above ── */
+    /* â”€â”€ Very faint downward light rays from far above â”€â”€ */
     const rays: Ray[] = Array.from({ length: 5 }, (_, i) => ({
       x: (canvas.width / 5) * i + canvas.width / 10,
       angle: -0.08 + Math.random() * 0.16,
@@ -921,7 +1114,7 @@ function DeepSeaLayer() {
     };
 
     const drawParticle = (p: Particle) => {
-      // Bioluminescent plankton — faint cyan/blue glow that pulses
+      // Bioluminescent plankton â€” faint cyan/blue glow that pulses
       const glowAlpha = p.alpha * (0.5 + 0.5 * Math.sin(p.phase + t * 2.1));
       const pg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 2.5);
       pg.addColorStop(0, `rgba(80,200,255,${glowAlpha.toFixed(3)})`);
@@ -958,11 +1151,71 @@ function DeepSeaLayer() {
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
-/* ─── Black Hole ─────────────────────────────────────────────────── */
-function BlackHoleLayer() {
+function CustomSpecialLayer() {
+  const [config, setConfig] = React.useState<{ backgroundUrl?: string; backgroundType?: 'image' | 'video' } | null>(null);
+
+  useEffect(() => {
+    const readConfig = () => {
+      try {
+        const raw = localStorage.getItem('raider_custom_theme');
+        setConfig(raw ? JSON.parse(raw) : null);
+      } catch {
+        setConfig(null);
+      }
+    };
+
+    readConfig();
+    window.addEventListener('storage', readConfig);
+    window.addEventListener('raider-custom-theme-updated', readConfig as EventListener);
+    return () => {
+      window.removeEventListener('storage', readConfig);
+      window.removeEventListener('raider-custom-theme-updated', readConfig as EventListener);
+    };
+  }, []);
+
+  if (!config?.backgroundUrl) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: 'none',
+          background: 'linear-gradient(135deg, rgba(15,18,36,0.96), rgba(24,33,58,0.92), rgba(12,16,28,0.98))',
+        }}
+      />
+    );
+  }
+
+  if (config.backgroundType === 'video') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <video src={config.backgroundUrl} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+        <div style={{ position: 'absolute', inset: 0, background: `rgba(8, 10, 20, var(--custom-theme-overlay, 0.26))` }} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: 'none',
+        backgroundImage: `linear-gradient(rgba(8, 10, 20, var(--custom-theme-overlay, 0.26)), rgba(8, 10, 20, var(--custom-theme-overlay, 0.26))), url(${config.backgroundUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    />
+  );
+}
+
+/* â”€â”€â”€ Firefly: dark night with orange fireflies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function FireflyLayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 
@@ -974,253 +1227,1112 @@ function BlackHoleLayer() {
     resize();
     window.addEventListener('resize', resize);
 
-    type Star = { x: number; y: number; r: number; phase: number; twinkle: number; pullSpeed: number; hue: number };
-
-    const spawnStar = (): Star => {
-      const angle = Math.random() * Math.PI * 2;
-      const maxR = Math.sqrt((window.innerWidth / 2) ** 2 + (window.innerHeight / 2) ** 2);
-      const spawnR = maxR * (0.78 + Math.random() * 0.22);
-      return {
-        x: Math.max(0, Math.min(window.innerWidth,  window.innerWidth  / 2 + Math.cos(angle) * spawnR)),
-        y: Math.max(0, Math.min(window.innerHeight, window.innerHeight / 2 + Math.sin(angle) * spawnR)),
-        r: 0.3 + Math.random() * 1.6,
-        phase: Math.random() * Math.PI * 2,
-        twinkle: 0.004 + Math.random() * 0.01,
-        pullSpeed: 0.00012 + Math.random() * 0.00025,
-        hue: Math.random() < 0.6 ? 200 + Math.random() * 50 : 30 + Math.random() * 30,
-      };
-    };
-
-    const stars: Star[] = Array.from({ length: 420 }, () => ({
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
-      r: 0.3 + Math.random() * 1.6,
+    // Dense starfield for beautiful night sky
+    const STAR_COUNT = 200;
+    type Star = { x: number; y: number; r: number; phase: number; brightness: number };
+    const stars: Star[] = Array.from({ length: STAR_COUNT }, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.78,
+      r: Math.random() * 1.2 + 0.15,
       phase: Math.random() * Math.PI * 2,
-      twinkle: 0.004 + Math.random() * 0.01,
-      pullSpeed: 0.00012 + Math.random() * 0.00025,
-      hue: Math.random() < 0.6 ? 200 + Math.random() * 50 : 30 + Math.random() * 30,
+      brightness: Math.random() * 0.35 + 0.08,
     }));
 
-    type Debris = { angle: number; radius: number; r: number; hue: number; alpha: number; speed: number };
-    const makeDebris = (): Debris => ({
-      angle: Math.random() * Math.PI * 2,
-      radius: 0.11 + Math.random() * 0.24,
-      r: 0.6 + Math.random() * 2.8,
-      hue: 18 + Math.random() * 42,
-      alpha: 0.55 + Math.random() * 0.45,
-      speed: 0.005 + Math.random() * 0.013,
-    });
-    const debris: Debris[] = Array.from({ length: 180 }, makeDebris);
+    // Fireflies â€” warm orange/amber
+    const FLY_COUNT = 60;
+    type Fly = { x: number; y: number; vx: number; vy: number; r: number; phase: number; speed: number; hue: number; glowState: number; glowTarget: number; glowDelay: number };
+    const flies: Fly[] = Array.from({ length: FLY_COUNT }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: window.innerHeight * (0.45 + Math.random() * 0.55), // mostly below treeline
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: (Math.random() - 0.5) * 0.2,
+      r: Math.random() * 2.8 + 0.8,
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.008 + 0.003,
+      hue: Math.random() * 30 + 18, // 18-48: warm orange/amber
+      glowState: Math.random() * 0.3,
+      glowTarget: Math.random() > 0.6 ? 0.8 + Math.random() * 0.2 : 0,
+      glowDelay: Math.random() * 4 + 1,
+    }));
 
-    // Plasma jet blobs shooting along polar axis
-    type Blob = { offset: number; r: number; alpha: number; speed: number; dir: number };
-    const makeBlob = (dir: number): Blob => ({
-      offset: Math.random() * 0.8,
-      r: 3 + Math.random() * 7,
-      alpha: 0.25 + Math.random() * 0.45,
-      speed: 1.2 + Math.random() * 1.8,
-      dir,
-    });
-    const blobs: Blob[] = [
-      ...Array.from({ length: 14 }, () => makeBlob(-1)),
-      ...Array.from({ length: 14 }, () => makeBlob(1)),
-    ];
+    // Ground terrain â€” rolling hills baseline
+    const HILL_SEGS = 150;
+    const hillPoints: number[] = [];
+    for (let i = 0; i <= HILL_SEGS; i++) {
+      const x = i / HILL_SEGS;
+      hillPoints.push(
+        0.80 + Math.sin(x * 2.8 + 0.5) * 0.035 + Math.sin(x * 6.5 + 1.2) * 0.02 + Math.sin(x * 14 + 2.8) * 0.01
+      );
+    }
+
+    // Pine tree silhouettes (varied sizes & positions along hill)
+    type Tree = { xFrac: number; height: number; width: number; layers: number };
+    const trees: Tree[] = [];
+    for (let i = 0; i < 45; i++) {
+      trees.push({
+        xFrac: Math.random(),
+        height: 25 + Math.random() * 55,
+        width: 8 + Math.random() * 16,
+        layers: 3 + Math.floor(Math.random() * 4),
+      });
+    }
+    trees.sort((a, b) => a.height - b.height); // smaller trees drawn first (further away)
 
     let t = 0;
-
     const draw = () => {
-      t += 0.007;
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2;
-      const baseR = Math.min(W, H) * 0.10;
-      const diskInner = baseR * 1.32;
-      const diskOuter = baseR * 4.4;
-      const tilt = 0.26;
+      t += 0.016;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
 
-      ctx.clearRect(0, 0, W, H);
+      // Very dark desaturated night sky
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+      skyGrad.addColorStop(0, 'rgba(2, 3, 8, 0.85)');
+      skyGrad.addColorStop(0.3, 'rgba(4, 5, 14, 0.7)');
+      skyGrad.addColorStop(0.65, 'rgba(6, 8, 16, 0.45)');
+      skyGrad.addColorStop(1, 'rgba(4, 5, 10, 0.2)');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
 
-      // ── Nebula background ──
-      const nA = ctx.createRadialGradient(cx * 0.4, cy * 0.5, 0, cx * 0.4, cy * 0.5, W * 0.6);
-      nA.addColorStop(0, 'rgba(45,10,90,0.20)'); nA.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = nA; ctx.fillRect(0, 0, W, H);
-      const nB = ctx.createRadialGradient(cx * 1.6, cy * 1.4, 0, cx * 1.6, cy * 1.4, W * 0.5);
-      nB.addColorStop(0, 'rgba(10,25,70,0.16)'); nB.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = nB; ctx.fillRect(0, 0, W, H);
-      // Warm disk glow bleeding into background
-      const diskGlow = ctx.createRadialGradient(cx, cy + baseR * 0.3, 0, cx, cy + baseR * 0.3, diskOuter * 1.5);
-      diskGlow.addColorStop(0, 'rgba(255,110,15,0.12)');
-      diskGlow.addColorStop(0.35, 'rgba(180,55,8,0.06)');
-      diskGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = diskGlow; ctx.fillRect(0, 0, W, H);
+      // Faint Milky Way band (very subtle diagonal wash)
+      ctx.save();
+      ctx.translate(w * 0.3, 0);
+      ctx.rotate(0.4);
+      const milkyWay = ctx.createLinearGradient(0, -h * 0.1, w * 0.25, h * 0.6);
+      milkyWay.addColorStop(0, 'rgba(60, 50, 70, 0)');
+      milkyWay.addColorStop(0.3, 'rgba(50, 45, 65, 0.025)');
+      milkyWay.addColorStop(0.5, 'rgba(60, 55, 75, 0.035)');
+      milkyWay.addColorStop(0.7, 'rgba(50, 45, 65, 0.025)');
+      milkyWay.addColorStop(1, 'rgba(60, 50, 70, 0)');
+      ctx.fillStyle = milkyWay;
+      ctx.fillRect(-w * 0.2, -h * 0.1, w * 0.5, h * 1.2);
+      ctx.restore();
 
-      // ── Stars with trails near the hole ──
+      // Stars â€” beautiful twinkling night sky
+      const groundLine = 0.78;
       for (const s of stars) {
-        const dx = cx - s.x, dy = cy - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        s.x += dx * s.pullSpeed;
-        s.y += dy * s.pullSpeed;
-        if (dist < baseR * 0.85) Object.assign(s, spawnStar());
-        // Gravitational blueshift feel — draw a short streak toward center
-        if (dist < diskOuter * 1.8) {
-          const trailFrac = Math.max(0, 1 - dist / (diskOuter * 1.8));
-          const tLen = trailFrac * 12 * s.r;
+        if (s.y > groundLine) continue;
+        const twinkle = s.brightness + Math.sin(t * (1 + s.phase * 0.3) + s.phase) * s.brightness * 0.5;
+        const a = Math.max(0, twinkle);
+        // Color variation: mostly white/blue, some warm
+        const temp = s.phase > 4 ? 220 : s.phase > 2 ? 200 : 180;
+        const sat = s.phase > 4 ? 30 : 10;
+        ctx.fillStyle = `hsla(${temp}, ${sat}%, 90%, ${a})`;
+        ctx.beginPath();
+        ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Faint star glow for brighter stars
+        if (s.r > 0.7 && a > 0.15) {
+          const sg = ctx.createRadialGradient(s.x * w, s.y * h, 0, s.x * w, s.y * h, s.r * 4);
+          sg.addColorStop(0, `hsla(${temp}, ${sat}%, 85%, ${a * 0.2})`);
+          sg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = sg;
           ctx.beginPath();
-          ctx.moveTo(s.x + (dx / dist) * tLen, s.y + (dy / dist) * tLen);
-          ctx.lineTo(s.x, s.y);
-          ctx.strokeStyle = `hsla(${s.hue},75%,88%,${(trailFrac * 0.22).toFixed(3)})`;
-          ctx.lineWidth = s.r * 0.7;
-          ctx.stroke();
+          ctx.arc(s.x * w, s.y * h, s.r * 4, 0, Math.PI * 2);
+          ctx.fill();
         }
-        const alpha = 0.30 + 0.60 * (0.5 + 0.5 * Math.sin(s.phase + t * s.twinkle * 80));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${s.hue},70%,95%,${alpha.toFixed(2)})`;
-        ctx.fill();
       }
 
-      // ── Polar jets — cone fill + plasma blobs ──
-      const jetCone = (dir: number) => {
-        const y0 = cy + dir * baseR * 1.05;
-        const y1 = cy + dir * H * 0.52;
-        const spread = W * 0.042;
-        const g = ctx.createLinearGradient(cx, y0, cx, y1);
-        g.addColorStop(0,   'rgba(160,210,255,0.40)');
-        g.addColorStop(0.25,'rgba(120,170,255,0.18)');
-        g.addColorStop(0.6, 'rgba(80,130,240,0.06)');
-        g.addColorStop(1,   'rgba(60,100,220,0)');
-        ctx.beginPath();
-        ctx.moveTo(cx, y0);
-        ctx.lineTo(cx - spread, y1);
-        ctx.lineTo(cx + spread, y1);
-        ctx.closePath();
-        ctx.fillStyle = g; ctx.fill();
-      };
-      jetCone(-1); jetCone(1);
-
-      for (const b of blobs) {
-        b.offset = (b.offset + b.speed * 0.004) % 1;
-        const dist2 = b.offset * H * 0.5;
-        const by = cy + b.dir * dist2;
-        const bx = cx + Math.sin(t * 0.5 + b.r) * baseR * 0.07;
-        const progress = b.offset;
-        const aFade = b.alpha * (1 - progress * 0.85);
-        const sr = b.r * (1 + progress * 1.8);
-        const bg2 = ctx.createRadialGradient(bx, by, 0, bx, by, sr * 3.5);
-        bg2.addColorStop(0, `rgba(180,220,255,${(aFade * 0.65).toFixed(3)})`);
-        bg2.addColorStop(0.45, `rgba(120,160,255,${(aFade * 0.25).toFixed(3)})`);
-        bg2.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.beginPath(); ctx.arc(bx, by, sr * 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = bg2; ctx.fill();
-      }
-
-      // ── Accretion disk back half (top — behind hole, dimmer) ──
-      ctx.save();
-      for (let r = diskOuter; r >= diskInner; r -= 2) {
-        const frac = (r - diskInner) / (diskOuter - diskInner);
-        const hue = 26 - frac * 16;
-        const sat = 95 - frac * 12;
-        const lum = 68 - frac * 26;
-        const a = (0.025 + (1 - frac) * 0.11) * 0.52;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r, r * tilt, 0, Math.PI, 0, true);
-        ctx.strokeStyle = `hsla(${hue},${sat}%,${lum}%,${a.toFixed(3)})`;
-        ctx.lineWidth = 3.5 - frac * 1.8;
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // ── Gravitational shadow ──
-      const shadowR = baseR * 1.28;
-      const shadow = ctx.createRadialGradient(cx, cy, baseR * 0.52, cx, cy, shadowR * 1.22);
-      shadow.addColorStop(0,    'rgba(0,0,0,1)');
-      shadow.addColorStop(0.78, 'rgba(0,0,0,0.97)');
-      shadow.addColorStop(1,    'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(cx, cy, shadowR * 1.22, 0, Math.PI * 2);
-      ctx.fillStyle = shadow; ctx.fill();
-
-      // ── Einstein / photon rings (glowing, with shadow blur) ──
-      ctx.save();
-      ctx.shadowColor = 'rgba(255,205,70,1)';
-      ctx.shadowBlur = 22;
+      // Ground silhouette (dark rolling hills)
       ctx.beginPath();
-      ctx.arc(cx, cy, baseR * 1.09, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,220,100,0.80)';
-      ctx.lineWidth = 2.2; ctx.stroke();
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = 'rgba(255,240,150,0.7)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseR * 1.17, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,230,110,0.36)';
-      ctx.lineWidth = 1.4; ctx.stroke();
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = 'rgba(255,180,60,0.4)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseR * 1.26, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,190,70,0.15)';
-      ctx.lineWidth = 1.0; ctx.stroke();
-      ctx.restore();
-
-      // ── Accretion disk front half (much brighter — relativistic beaming) ──
-      ctx.save();
-      for (let r = diskOuter; r >= diskInner; r -= 2) {
-        const frac = (r - diskInner) / (diskOuter - diskInner);
-        const hue = 26 - frac * 16;
-        const sat = 98 - frac * 8;
-        const lum = 80 - frac * 26;
-        const a = 0.16 + (1 - frac) * 0.62;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r, r * tilt, 0, 0, Math.PI);
-        ctx.strokeStyle = `hsla(${hue},${sat}%,${lum}%,${a.toFixed(3)})`;
-        ctx.lineWidth = 3.5 - frac * 1.8;
-        ctx.stroke();
+      ctx.moveTo(0, h);
+      for (let i = 0; i <= HILL_SEGS; i++) {
+        ctx.lineTo((i / HILL_SEGS) * w, hillPoints[i] * h);
       }
-      // Blazing inner edge glow
-      ctx.shadowBlur = 28;
-      ctx.shadowColor = 'rgba(255,150,20,0.9)';
-      for (let r = diskInner; r <= diskInner * 1.5; r += 2) {
-        const frac = (r - diskInner) / (diskInner * 0.5);
-        const a = 0.75 - frac * 0.52;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r, r * tilt, 0, 0, Math.PI);
-        ctx.strokeStyle = `rgba(255,200,70,${a.toFixed(2)})`;
-        ctx.lineWidth = 3; ctx.stroke();
-      }
-      ctx.restore();
-
-      // ── Debris particles spiralling inward ──
-      for (const d of debris) {
-        const rPx = d.radius * Math.min(W, H) * 0.5;
-        d.angle += d.speed * (diskInner / Math.max(rPx, 1));
-        d.radius -= 0.00014;
-        if (d.radius < 0.055) Object.assign(d, makeDebris());
-        const x = cx + Math.cos(d.angle) * rPx;
-        const y = cy + Math.sin(d.angle) * rPx * tilt;
-        const front = y > cy;
-        if (!front && Math.sin(d.angle) < -0.38) continue;
-        const a = front ? d.alpha : d.alpha * 0.22;
-        ctx.beginPath();
-        ctx.arc(x, y, d.r, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${d.hue},96%,82%,${a.toFixed(2)})`;
-        ctx.fill();
-      }
-
-      // ── Event horizon — pure black ──
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
-      ctx.fillStyle = '#000';
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(2, 4, 6, 0.85)';
       ctx.fill();
+
+      // Pine tree silhouettes (layered triangles for pine shape)
+      for (const tree of trees) {
+        const tx = tree.xFrac * w;
+        const idx = Math.min(HILL_SEGS, Math.floor(tree.xFrac * HILL_SEGS));
+        const groundY = hillPoints[idx] * h;
+        const treeH = tree.height;
+        const baseW = tree.width;
+
+        // Trunk
+        ctx.fillStyle = 'rgba(1, 2, 3, 0.9)';
+        ctx.fillRect(tx - 1.5, groundY - treeH * 0.2, 3, treeH * 0.25);
+
+        // Pine layers (triangle tiers)
+        for (let layer = 0; layer < tree.layers; layer++) {
+          const layerFrac = layer / tree.layers;
+          const tierBottom = groundY - treeH * 0.15 - layerFrac * treeH * 0.7;
+          const tierTop = tierBottom - treeH * (0.35 - layerFrac * 0.08);
+          const tierWidth = baseW * (1 - layerFrac * 0.3);
+          ctx.fillStyle = `rgba(1, 3, 4, ${0.75 + layerFrac * 0.15})`;
+          ctx.beginPath();
+          ctx.moveTo(tx - tierWidth * 0.5, tierBottom);
+          ctx.lineTo(tx, tierTop);
+          ctx.lineTo(tx + tierWidth * 0.5, tierBottom);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // Ambient orange glow along ground (firefly collective light)
+      const activeGlow = flies.reduce((sum, f) => sum + f.glowState, 0) / flies.length;
+      const ambientAlpha = 0.02 + activeGlow * 0.04;
+      const ambGrad = ctx.createRadialGradient(w * 0.5, h * 0.82, 0, w * 0.5, h * 0.82, w * 0.6);
+      ambGrad.addColorStop(0, `rgba(255, 140, 30, ${ambientAlpha})`);
+      ambGrad.addColorStop(0.5, `rgba(255, 100, 20, ${ambientAlpha * 0.4})`);
+      ambGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ambGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Fireflies with dynamic lighting
+      for (const f of flies) {
+        // Organic wandering
+        f.vx += (Math.sin(t * 0.6 + f.phase * 3) * 0.008 - f.vx * 0.004);
+        f.vy += (Math.cos(t * 0.4 + f.phase * 2) * 0.008 - f.vy * 0.004);
+        f.x += f.vx + Math.sin(t * 0.35 + f.phase) * 0.12;
+        f.y += f.vy + Math.cos(t * 0.2 + f.phase) * 0.1;
+
+        // Keep mostly in lower portion but allow some drift
+        if (f.x < -40) f.x = w + 40;
+        if (f.x > w + 40) f.x = -40;
+        if (f.y < h * 0.35) f.y = h * 0.35 + Math.random() * 20;
+        if (f.y > h + 20) f.y = h * 0.5;
+
+        // Organic glow pulsing â€” slow fade in/out with random timing
+        f.glowDelay -= 0.016;
+        if (f.glowDelay <= 0) {
+          f.glowTarget = f.glowTarget > 0.4 ? 0 : 0.6 + Math.random() * 0.4;
+          f.glowDelay = 2 + Math.random() * 5;
+        }
+        f.glowState += (f.glowTarget - f.glowState) * 0.025;
+
+        const alpha = f.glowState;
+        if (alpha < 0.015) continue;
+
+        // Large dynamic glow (lights up surroundings)
+        const dynamicR = f.r * (8 + alpha * 14);
+        const dynGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, dynamicR);
+        dynGrad.addColorStop(0, `hsla(${f.hue}, 100%, 65%, ${alpha * 0.5})`);
+        dynGrad.addColorStop(0.15, `hsla(${f.hue}, 95%, 50%, ${alpha * 0.25})`);
+        dynGrad.addColorStop(0.4, `hsla(${f.hue}, 90%, 40%, ${alpha * 0.06})`);
+        dynGrad.addColorStop(0.7, `hsla(${f.hue}, 85%, 35%, ${alpha * 0.015})`);
+        dynGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = dynGrad;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, dynamicR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner warm glow
+        const innerR = f.r * (3 + alpha * 4);
+        const innerGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, innerR);
+        innerGrad.addColorStop(0, `hsla(${f.hue + 10}, 100%, 80%, ${alpha * 0.8})`);
+        innerGrad.addColorStop(0.4, `hsla(${f.hue}, 100%, 60%, ${alpha * 0.35})`);
+        innerGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = innerGrad;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, innerR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bright hot core
+        ctx.fillStyle = `hsla(${f.hue + 15}, 100%, 90%, ${alpha * 0.95})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       rafRef.current = requestAnimationFrame(draw);
     };
-
-    rafRef.current = requestAnimationFrame(draw);
+    draw();
     return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none' }} />;
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
 }
 
-/* ─── Main export ───────────────────────────────────────────────── */
+/* â”€â”€â”€ Cyberpunk: CPU trace routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function CyberpunkLayer() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Trace routes â€” signals travelling along circuit paths
+    type Trace = {
+      points: { x: number; y: number }[];
+      progress: number;
+      speed: number;
+      hue: number;
+      width: number;
+      len: number;
+      alpha: number;
+      inlaid: boolean; // permanent etched trace
+    };
+
+    const buildTrace = (forceInlaid?: boolean): Trace => {
+      const w = canvas.width, h = canvas.height;
+      const pts: { x: number; y: number }[] = [];
+      let x = Math.random() * w;
+      let y = Math.random() * h;
+      pts.push({ x, y });
+      const segments = 8 + Math.floor(Math.random() * 16); // More segments (8-24)
+      for (let i = 0; i < segments; i++) {
+        const horizontal = Math.random() > 0.5;
+        if (horizontal) {
+          x += (Math.random() - 0.5) * 400;
+          x = Math.max(20, Math.min(w - 20, x));
+        } else {
+          y += (Math.random() - 0.5) * 400;
+          y = Math.max(20, Math.min(h - 20, y));
+        }
+        pts.push({ x, y });
+      }
+      const isInlaid = forceInlaid || Math.random() < 0.35;
+      return {
+        points: pts,
+        progress: 0,
+        speed: isInlaid ? 0 : (0.001 + Math.random() * 0.004), // Slower = longer life
+        hue: Math.random() < 0.6 ? 175 + Math.random() * 10 : Math.random() < 0.8 ? 280 + Math.random() * 20 : 50 + Math.random() * 10,
+        width: Math.random() * 1.2 + 0.5,
+        len: 0.08 + Math.random() * 0.18, // Longer trace tails
+        alpha: isInlaid ? 0.08 + Math.random() * 0.06 : 0.3 + Math.random() * 0.4,
+        inlaid: isInlaid,
+      };
+    };
+
+    // Much more traces: 50 animated + 30 inlaid
+    const TRACE_COUNT = 50;
+    const INLAID_COUNT = 30;
+    const traces: Trace[] = [
+      ...Array.from({ length: TRACE_COUNT }, () => buildTrace(false)),
+      ...Array.from({ length: INLAID_COUNT }, () => buildTrace(true)),
+    ];
+
+    // Static circuit nodes (junction dots)
+    type Node = { x: number; y: number; r: number; pulse: number; hue: number };
+    const nodes: Node[] = Array.from({ length: 55 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: Math.random() * 2 + 1,
+      pulse: Math.random() * Math.PI * 2,
+      hue: Math.random() < 0.7 ? 180 : 285,
+    }));
+
+    // Static trace lines (dim background circuit pattern)
+    type StaticLine = { x1: number; y1: number; x2: number; y2: number };
+    const statics: StaticLine[] = [];
+    for (let i = 0; i < 80; i++) {
+      const n = nodes[Math.floor(Math.random() * nodes.length)];
+      const horizontal = Math.random() > 0.5;
+      const len = 30 + Math.random() * 180;
+      statics.push({
+        x1: n.x,
+        y1: n.y,
+        x2: horizontal ? n.x + (Math.random() > 0.5 ? len : -len) : n.x,
+        y2: horizontal ? n.y : n.y + (Math.random() > 0.5 ? len : -len),
+      });
+    }
+
+    let t = 0;
+    const draw = () => {
+      t += 0.016;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Static background circuit lines
+      ctx.lineWidth = 0.5;
+      for (const sl of statics) {
+        ctx.strokeStyle = 'rgba(0, 255, 230, 0.025)';
+        ctx.beginPath();
+        ctx.moveTo(sl.x1, sl.y1);
+        ctx.lineTo(sl.x2, sl.y2);
+        ctx.stroke();
+      }
+
+      // Circuit junction nodes
+      for (const n of nodes) {
+        const pulse = 0.15 + Math.sin(t * 1.5 + n.pulse) * 0.1;
+        ctx.fillStyle = `hsla(${n.hue}, 100%, 70%, ${pulse})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+        // Tiny glow
+        const ng = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 5);
+        ng.addColorStop(0, `hsla(${n.hue}, 100%, 70%, ${pulse * 0.3})`);
+        ng.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = ng;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw traces (both animated and inlaid)
+      for (const tr of traces) {
+        const pts = tr.points;
+        // Compute total path length
+        let totalLen = 0;
+        const segLens: number[] = [];
+        for (let i = 1; i < pts.length; i++) {
+          const dx = pts[i].x - pts[i - 1].x;
+          const dy = pts[i].y - pts[i - 1].y;
+          const sl = Math.sqrt(dx * dx + dy * dy);
+          segLens.push(sl);
+          totalLen += sl;
+        }
+
+        if (tr.inlaid) {
+          // INLAID ETCHED TRACES â€” permanent recessed circuit lines
+          // Dark inner shadow (recessed groove)
+          ctx.strokeStyle = `hsla(${tr.hue}, 60%, 15%, ${0.12 + Math.sin(t * 0.5 + tr.alpha * 40) * 0.03})`;
+          ctx.lineWidth = tr.width + 2;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x + 0.5, pts[0].y + 0.5);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x + 0.5, pts[i].y + 0.5);
+          ctx.stroke();
+
+          // Main trace line (dim, etched look)
+          ctx.strokeStyle = `hsla(${tr.hue}, 80%, 40%, ${tr.alpha + Math.sin(t * 0.3 + tr.alpha * 30) * 0.02})`;
+          ctx.lineWidth = tr.width;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.stroke();
+
+          // Top-edge highlight (raised light edge for inlay effect)
+          ctx.strokeStyle = `hsla(${tr.hue}, 90%, 65%, ${0.04 + Math.sin(t * 0.4 + tr.alpha * 20) * 0.015})`;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x - 0.5, pts[0].y - 0.5);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x - 0.5, pts[i].y - 0.5);
+          ctx.stroke();
+
+          // Junction dots at corners
+          for (let i = 1; i < pts.length - 1; i++) {
+            ctx.fillStyle = `hsla(${tr.hue}, 80%, 50%, ${0.08 + Math.sin(t * 0.6 + i * 1.5) * 0.03})`;
+            ctx.beginPath();
+            ctx.arc(pts[i].x, pts[i].y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          continue;
+        }
+
+        // ANIMATED TRACES
+        tr.progress += tr.speed;
+        if (tr.progress > 1 + tr.len) {
+          Object.assign(tr, buildTrace(false));
+          continue;
+        }
+
+        // Draw the trace path (dim)
+        ctx.strokeStyle = `hsla(${tr.hue}, 80%, 60%, 0.035)`;
+        ctx.lineWidth = tr.width;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+
+        // Draw the glowing signal head
+        const headDist = tr.progress * totalLen;
+        const tailDist = Math.max(0, (tr.progress - tr.len) * totalLen);
+
+        // Find position along path at a given distance
+        const posAt = (d: number) => {
+          let acc = 0;
+          for (let i = 0; i < segLens.length; i++) {
+            if (acc + segLens[i] >= d) {
+              const frac = (d - acc) / segLens[i];
+              return {
+                x: pts[i].x + (pts[i + 1].x - pts[i].x) * frac,
+                y: pts[i].y + (pts[i + 1].y - pts[i].y) * frac,
+                seg: i,
+              };
+            }
+            acc += segLens[i];
+          }
+          return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y, seg: segLens.length - 1 };
+        };
+
+        // Draw glowing segment
+        const steps = 16;
+        for (let s = 0; s <= steps; s++) {
+          const d = tailDist + (headDist - tailDist) * (s / steps);
+          if (d < 0 || d > totalLen) continue;
+          const p = posAt(d);
+          const frac = s / steps; // 0=tail, 1=head
+          const a = tr.alpha * frac;
+          const glowR = (tr.width + 2) * (1 + frac * 2);
+          const sg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+          sg.addColorStop(0, `hsla(${tr.hue}, 100%, 80%, ${a})`);
+          sg.addColorStop(0.5, `hsla(${tr.hue}, 90%, 60%, ${a * 0.3})`);
+          sg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Bright dot at head
+        const head = posAt(Math.min(headDist, totalLen));
+        ctx.fillStyle = `hsla(${tr.hue}, 100%, 90%, ${tr.alpha})`;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, tr.width + 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Scanline overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+      for (let y = 0; y < h; y += 3) {
+        ctx.fillRect(0, y, w, 1);
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
+/* â”€â”€â”€ Snowfall: gentle snowflakes with wavy snow ground â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function SnowfallLayer() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const COUNT = 150;
+    type Flake = { x: number; y: number; r: number; speed: number; drift: number; phase: number; opacity: number };
+    const flakes: Flake[] = Array.from({ length: COUNT }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: Math.random() * 3 + 0.8,
+      speed: Math.random() * 1.0 + 0.3,
+      drift: Math.random() * 0.5 - 0.25,
+      phase: Math.random() * Math.PI * 2,
+      opacity: Math.random() * 0.5 + 0.3,
+    }));
+
+    let t = 0;
+    const draw = () => {
+      t += 0.016;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Snowflakes
+      for (const f of flakes) {
+        f.y += f.speed;
+        f.x += f.drift + Math.sin(t * 0.5 + f.phase) * 0.3;
+        // Stop flakes at the snow ground level instead of wrapping
+        const groundY = h * 0.88 + Math.sin((f.x / w) * Math.PI * 3) * h * 0.025;
+        if (f.y > groundY) {
+          f.y = -10;
+          f.x = Math.random() * w;
+        }
+        if (f.x < -10) f.x = w + 10;
+        if (f.x > w + 10) f.x = -10;
+
+        const alpha = f.opacity * (0.7 + Math.sin(t * 0.8 + f.phase) * 0.3);
+        ctx.fillStyle = `rgba(220, 235, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Wavy snow ground
+      const groundBase = h * 0.88;
+      // Back snow drift (slightly higher, dimmer)
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 3) {
+        const frac = x / w;
+        const y = groundBase - h * 0.02
+          + Math.sin(frac * Math.PI * 2.5 + 0.5) * h * 0.02
+          + Math.sin(frac * Math.PI * 6 + 1.2) * h * 0.008
+          + Math.sin(frac * Math.PI * 13) * h * 0.003;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      const backSnow = ctx.createLinearGradient(0, groundBase - h * 0.04, 0, h);
+      backSnow.addColorStop(0, 'rgba(180, 200, 220, 0.15)');
+      backSnow.addColorStop(0.3, 'rgba(160, 180, 210, 0.12)');
+      backSnow.addColorStop(1, 'rgba(140, 160, 190, 0.08)');
+      ctx.fillStyle = backSnow;
+      ctx.fill();
+
+      // Main snow drift (front)
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 2) {
+        const frac = x / w;
+        const y = groundBase
+          + Math.sin(frac * Math.PI * 3) * h * 0.025
+          + Math.sin(frac * Math.PI * 7 + 0.8) * h * 0.01
+          + Math.sin(frac * Math.PI * 16 + t * 0.1) * h * 0.003;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      const snowGrad = ctx.createLinearGradient(0, groundBase - h * 0.01, 0, h);
+      snowGrad.addColorStop(0, 'rgba(210, 225, 245, 0.28)');
+      snowGrad.addColorStop(0.15, 'rgba(200, 215, 240, 0.22)');
+      snowGrad.addColorStop(0.5, 'rgba(185, 200, 230, 0.15)');
+      snowGrad.addColorStop(1, 'rgba(170, 190, 220, 0.08)');
+      ctx.fillStyle = snowGrad;
+      ctx.fill();
+
+      // Snow surface highlight
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 2) {
+        const frac = x / w;
+        const y = groundBase
+          + Math.sin(frac * Math.PI * 3) * h * 0.025
+          + Math.sin(frac * Math.PI * 7 + 0.8) * h * 0.01
+          + Math.sin(frac * Math.PI * 16 + t * 0.1) * h * 0.003;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(230, 240, 255, 0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
+/* â”€â”€â”€ Retrowave: synthwave sun + mountain grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function RetrowaveLayer() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Generate mountain silhouette (2 layers)
+    const genMountain = (segments: number, amplitude: number, baseY: number, seed: number) => {
+      const pts: number[] = [];
+      for (let i = 0; i <= segments; i++) {
+        const x = i / segments;
+        pts.push(baseY
+          - amplitude * Math.sin(x * Math.PI * 1.3 + seed) * 0.6
+          - amplitude * Math.sin(x * Math.PI * 2.7 + seed * 2) * 0.3
+          - amplitude * Math.sin(x * Math.PI * 5.1 + seed * 3) * 0.15
+          - amplitude * Math.max(0, Math.sin(x * Math.PI * 0.8 + seed * 0.5)) * 0.4
+        );
+      }
+      return pts;
+    };
+
+    const MTN_SEGS = 200;
+    const backMtn = genMountain(MTN_SEGS, 0.14, 0.55, 1.7);
+    const frontMtn = genMountain(MTN_SEGS, 0.10, 0.55, 4.2);
+
+    let t = 0;
+    const draw = () => {
+      t += 0.035; // Faster animation speed
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width;
+      const h = canvas.height;
+      const horizon = h * 0.55;
+
+      // Stars above horizon (twinkling)
+      for (let i = 0; i < 50; i++) {
+        const sx = ((i * 137.5) % w);
+        const sy = ((i * 97.3) % (horizon * 0.85));
+        const sr = 0.3 + (i % 5) * 0.22;
+        const twinkle = 0.08 + Math.sin(t * 1.2 + i * 2.1) * 0.06;
+        ctx.fillStyle = `rgba(255, 200, 255, ${twinkle})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Sun glow
+      const sunR = Math.min(w, h) * 0.12;
+      const sunX = w * 0.5;
+      const sunY = horizon - sunR * 0.15;
+      const sunPulse = 1 + Math.sin(t * 0.8) * 0.04;
+      const sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR * 2.5 * sunPulse);
+      sunGrad.addColorStop(0, 'rgba(255, 60, 120, 0.35)');
+      sunGrad.addColorStop(0.3, 'rgba(255, 100, 50, 0.15)');
+      sunGrad.addColorStop(1, 'rgba(255, 60, 120, 0)');
+      ctx.fillStyle = sunGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Sun body
+      const sunGrad2 = ctx.createLinearGradient(sunX, sunY - sunR, sunX, sunY + sunR);
+      sunGrad2.addColorStop(0, 'rgba(255, 230, 50, 0.65)');
+      sunGrad2.addColorStop(0.5, 'rgba(255, 120, 50, 0.55)');
+      sunGrad2.addColorStop(1, 'rgba(255, 40, 100, 0.45)');
+      ctx.fillStyle = sunGrad2;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stripe cutouts on sun
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 7; i++) {
+        const ly = sunY + sunR * 0.15 + i * sunR * 0.13;
+        const lh = 1.5 + i * 0.7;
+        ctx.fillStyle = `rgba(0,0,0,${0.5 + i * 0.07})`;
+        ctx.fillRect(sunX - sunR, ly, sunR * 2, lh);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Back mountain silhouette (darker, taller)
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let i = 0; i <= MTN_SEGS; i++) {
+        ctx.lineTo((i / MTN_SEGS) * w, backMtn[i] * h);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(30, 10, 50, 0.5)';
+      ctx.fill();
+
+      // Front mountain silhouette (purple tint)
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let i = 0; i <= MTN_SEGS; i++) {
+        ctx.lineTo((i / MTN_SEGS) * w, frontMtn[i] * h);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(50, 15, 70, 0.6)';
+      ctx.fill();
+
+      // Mountain grid lines (wireframe on front mountain)
+      ctx.strokeStyle = 'rgba(180, 50, 255, 0.1)';
+      ctx.lineWidth = 0.7;
+      // Vertical grid on mountain
+      for (let i = 0; i <= 30; i++) {
+        const frac = i / 30;
+        const x = frac * w;
+        const idx = Math.floor(frac * MTN_SEGS);
+        const mtnY = frontMtn[Math.min(idx, MTN_SEGS)] * h;
+        if (mtnY < horizon) {
+          ctx.beginPath();
+          ctx.moveTo(x, mtnY);
+          ctx.lineTo(x, horizon);
+          ctx.stroke();
+        }
+      }
+      // Horizontal contour lines on mountain
+      for (let y = horizon - 10; y > horizon - h * 0.15; y -= 12) {
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i <= MTN_SEGS; i++) {
+          const x = (i / MTN_SEGS) * w;
+          const mtnY = frontMtn[i] * h;
+          if (mtnY < y) {
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+          }
+        }
+        if (started) ctx.stroke();
+      }
+
+      // Floor below horizon â€” perspective grid flowing away from viewer
+      // Vertical perspective lines converging to vanishing point
+      ctx.strokeStyle = 'rgba(180, 50, 255, 0.12)';
+      ctx.lineWidth = 1;
+      const vanishX = w * 0.5;
+      const gridLines = 20;
+      for (let i = 0; i <= gridLines; i++) {
+        const frac = i / gridLines;
+        const bottomX = frac * w;
+        ctx.beginPath();
+        ctx.moveTo(vanishX, horizon);
+        ctx.lineTo(bottomX, h);
+        ctx.stroke();
+      }
+
+      // Horizontal grid lines â€” seamless infinite loop
+      const hLines = 28;
+      const floorH = h - horizon;
+      const scrollSpeed = 55; // Much faster scroll
+      const loopPeriod = 1.0; // Normalized loop cycle
+      const phase = ((t * scrollSpeed / floorH) % loopPeriod);
+      for (let i = 0; i < hLines; i++) {
+        const baseFrac = i / hLines;
+        const shifted = (baseFrac + phase) % 1.0;
+        // Perspective compression: squared mapping
+        const perspY = horizon + shifted * shifted * floorH;
+        if (perspY < horizon || perspY > h) continue;
+        // Fade lines near edges for seamless feel
+        const fadeNear = Math.min(1, (perspY - horizon) / 20);
+        const fadeFar = Math.min(1, (h - perspY) / 20);
+        ctx.globalAlpha = fadeNear * fadeFar;
+        ctx.beginPath();
+        ctx.moveTo(0, perspY);
+        ctx.lineTo(w, perspY);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Horizon glow line (pulsing)
+      const horizPulse = 0.12 + Math.sin(t * 1.5) * 0.03;
+      const horizGrad = ctx.createLinearGradient(0, horizon - 2, 0, horizon + 8);
+      horizGrad.addColorStop(0, 'rgba(255, 80, 200, 0)');
+      horizGrad.addColorStop(0.3, `rgba(255, 80, 200, ${horizPulse})`);
+      horizGrad.addColorStop(1, 'rgba(255, 80, 200, 0)');
+      ctx.fillStyle = horizGrad;
+      ctx.fillRect(0, horizon - 2, w, 10);
+
+      // Scanline overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.015)';
+      for (let y = 0; y < h; y += 4) {
+        ctx.fillRect(0, y, w, 1.5);
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
+/* â”€â”€â”€ Thunderstorm: lightning and rain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function ThunderstormLayer() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    type Drop = { x: number; y: number; len: number; speed: number; alpha: number };
+    const drops: Drop[] = Array.from({ length: 200 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      len: 8 + Math.random() * 20,
+      speed: 6 + Math.random() * 8,
+      alpha: 0.08 + Math.random() * 0.15,
+    }));
+
+    type BoltData = { points: { x: number; y: number }[]; life: number; maxLife: number; branches: { x: number; y: number }[][] };
+    let bolt: BoltData | null = null;
+    let flashAlpha = 0;
+    let nextBolt = 2 + Math.random() * 4;
+
+    const generateBolt = (sx: number, sy: number, ey: number): BoltData => {
+      const segs = 12 + Math.floor(Math.random() * 10);
+      const pts: { x: number; y: number }[] = [{ x: sx, y: sy }];
+      const dy = (ey - sy) / segs;
+      let x = sx;
+      for (let i = 1; i <= segs; i++) {
+        x += (Math.random() - 0.5) * 80;
+        pts.push({ x, y: sy + dy * i });
+      }
+      const branches: { x: number; y: number }[][] = [];
+      for (let b = 0; b < 3; b++) {
+        const bi = 2 + Math.floor(Math.random() * (segs - 3));
+        const bp = pts[bi];
+        const bLen = 3 + Math.floor(Math.random() * 5);
+        const bPts = [{ x: bp.x, y: bp.y }];
+        let bx = bp.x;
+        const dir = Math.random() > 0.5 ? 1 : -1;
+        for (let j = 1; j <= bLen; j++) {
+          bx += dir * (10 + Math.random() * 25);
+          bPts.push({ x: bx, y: bp.y + j * (dy * 0.8) });
+        }
+        branches.push(bPts);
+      }
+      return { points: pts, life: 0, maxLife: 12, branches };
+    };
+
+    const clouds = Array.from({ length: 8 }, () => ({
+      x: Math.random(), y: Math.random() * 0.18,
+      rx: 0.1 + Math.random() * 0.15,
+      ry: 0.025 + Math.random() * 0.035,
+      speed: 0.0003 + Math.random() * 0.0005,
+      alpha: 0.15 + Math.random() * 0.2,
+    }));
+
+    let t = 0;
+    const draw = () => {
+      t += 0.016;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, 'rgba(5, 5, 15, 0.92)');
+      sky.addColorStop(0.3, 'rgba(10, 12, 25, 0.8)');
+      sky.addColorStop(0.7, 'rgba(15, 18, 30, 0.6)');
+      sky.addColorStop(1, 'rgba(12, 15, 25, 0.35)');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
+
+      // Flash overlay
+      if (flashAlpha > 0) {
+        ctx.fillStyle = `rgba(180, 190, 220, ${flashAlpha * 0.12})`;
+        ctx.fillRect(0, 0, w, h);
+        flashAlpha *= 0.85;
+      }
+
+      // Clouds
+      for (const c of clouds) {
+        c.x = (c.x + c.speed) % 1.2;
+        const cx = (c.x - 0.1) * w, cy = c.y * h;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, c.rx * w);
+        const ca = c.alpha + flashAlpha * 0.15;
+        grad.addColorStop(0, `rgba(40, 45, 60, ${ca})`);
+        grad.addColorStop(0.6, `rgba(25, 28, 40, ${ca * 0.5})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.save();
+        ctx.scale(1, c.ry / c.rx);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy * (c.rx / c.ry), c.rx * w, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Rain
+      const windAngle = Math.sin(t * 0.3) * 0.15;
+      ctx.strokeStyle = 'rgba(150, 170, 200, 0.12)';
+      ctx.lineWidth = 1;
+      for (const d of drops) {
+        d.y += d.speed;
+        d.x += windAngle * d.speed;
+        if (d.y > h) { d.y = -d.len; d.x = Math.random() * w; }
+        if (d.x > w) d.x -= w;
+        if (d.x < 0) d.x += w;
+        ctx.globalAlpha = d.alpha;
+        ctx.beginPath();
+        ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x + windAngle * d.len, d.y + d.len);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Lightning
+      nextBolt -= 0.016;
+      if (nextBolt <= 0 && !bolt) {
+        bolt = generateBolt(w * (0.2 + Math.random() * 0.6), 0, h * (0.5 + Math.random() * 0.3));
+        flashAlpha = 1;
+        nextBolt = 3 + Math.random() * 6;
+      }
+      if (bolt) {
+        bolt.life++;
+        const ba = Math.max(0, 1 - bolt.life / bolt.maxLife);
+        ctx.strokeStyle = `rgba(200, 210, 255, ${ba * 0.9})`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = `rgba(150, 180, 255, ${ba})`;
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        for (let i = 0; i < bolt.points.length; i++) {
+          if (i === 0) ctx.moveTo(bolt.points[i].x, bolt.points[i].y);
+          else ctx.lineTo(bolt.points[i].x, bolt.points[i].y);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1.2;
+        for (const br of bolt.branches) {
+          ctx.beginPath();
+          for (let i = 0; i < br.length; i++) {
+            if (i === 0) ctx.moveTo(br[i].x, br[i].y);
+            else ctx.lineTo(br[i].x, br[i].y);
+          }
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        if (bolt.life >= bolt.maxLife) bolt = null;
+      }
+
+      // Horizon storm glow
+      const hg = ctx.createRadialGradient(w * 0.5, h, 0, w * 0.5, h, w * 0.5);
+      hg.addColorStop(0, `rgba(80, 100, 140, ${0.04 + flashAlpha * 0.06})`);
+      hg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, h * 0.5, w, h * 0.5);
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
+/* â”€â”€â”€ Enchanted: magical forest â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+function EnchantedLayer() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+
+    type Orb = { x: number; y: number; vx: number; vy: number; r: number; hue: number; phase: number; brightness: number };
+    const orbs: Orb[] = Array.from({ length: 35 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight * 0.75,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.2 - 0.1,
+      r: 2 + Math.random() * 4,
+      hue: [180, 260, 300, 120, 40][Math.floor(Math.random() * 5)],
+      phase: Math.random() * Math.PI * 2,
+      brightness: 0.3 + Math.random() * 0.5,
+    }));
+
+    type Sparkle = { x: number; y: number; life: number; maxLife: number; r: number; hue: number };
+    const sparkles: Sparkle[] = [];
+
+    const mushrooms = Array.from({ length: 12 }, () => ({
+      x: Math.random(),
+      h: 8 + Math.random() * 16,
+      w: 6 + Math.random() * 10,
+      hue: [120, 180, 280, 320][Math.floor(Math.random() * 4)],
+      phase: Math.random() * Math.PI * 2,
+    }));
+
+    const mistLayers = Array.from({ length: 5 }, () => ({
+      y: 0.6 + Math.random() * 0.25,
+      speed: 0.0002 + Math.random() * 0.0004,
+      offset: Math.random(),
+      alpha: 0.02 + Math.random() * 0.03,
+    }));
+
+    let t = 0;
+    const draw = () => {
+      t += 0.012;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, 'rgba(4, 2, 18, 0.92)');
+      sky.addColorStop(0.3, 'rgba(8, 5, 30, 0.75)');
+      sky.addColorStop(0.6, 'rgba(5, 15, 20, 0.55)');
+      sky.addColorStop(1, 'rgba(3, 10, 8, 0.3)');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
+
+      // Mist
+      for (const m of mistLayers) {
+        m.offset = (m.offset + m.speed) % 2;
+        for (let i = 0; i < 3; i++) {
+          const mx = ((m.offset + i * 0.7) % 2 - 0.3) * w;
+          const my = m.y * h;
+          const mg = ctx.createRadialGradient(mx, my, 0, mx, my, w * 0.3);
+          mg.addColorStop(0, `rgba(100, 140, 120, ${m.alpha})`);
+          mg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = mg;
+          ctx.beginPath();
+          ctx.arc(mx, my, w * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Orbs
+      for (const o of orbs) {
+        o.x += o.vx + Math.sin(t * 0.5 + o.phase) * 0.2;
+        o.y += o.vy + Math.cos(t * 0.3 + o.phase) * 0.15;
+        if (o.x < -30) o.x = w + 30;
+        if (o.x > w + 30) o.x = -30;
+        if (o.y < -30) o.y = h * 0.7;
+        if (o.y > h * 0.85) o.y = -30;
+        const pulse = o.brightness + Math.sin(t * 1.5 + o.phase) * 0.15;
+        const gr = o.r * (5 + pulse * 6);
+        const og = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, gr);
+        og.addColorStop(0, `hsla(${o.hue}, 80%, 65%, ${pulse * 0.4})`);
+        og.addColorStop(0.3, `hsla(${o.hue}, 70%, 50%, ${pulse * 0.15})`);
+        og.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = og;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, gr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `hsla(${o.hue}, 90%, 85%, ${pulse * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (Math.random() < 0.08) {
+          sparkles.push({
+            x: o.x + (Math.random() - 0.5) * 6,
+            y: o.y + (Math.random() - 0.5) * 6,
+            life: 0, maxLife: 30 + Math.random() * 30,
+            r: 0.3 + Math.random() * 0.8, hue: o.hue,
+          });
+        }
+      }
+
+      // Sparkles
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sp = sparkles[i];
+        sp.life++;
+        const prog = sp.life / sp.maxLife;
+        if (prog >= 1) { sparkles.splice(i, 1); continue; }
+        const a = (1 - prog) * 0.6;
+        ctx.fillStyle = `hsla(${sp.hue}, 100%, 85%, ${a})`;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.r * (1 - prog * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (sparkles.length > 150) sparkles.splice(0, 30);
+
+      // Ground
+      ctx.fillStyle = 'rgba(2, 5, 3, 0.7)';
+      ctx.fillRect(0, h * 0.88, w, h * 0.12);
+
+      // Glowing mushrooms
+      for (const m of mushrooms) {
+        const mx = m.x * w, my = h * 0.88;
+        const glow = 0.3 + Math.sin(t * 0.8 + m.phase) * 0.15;
+        ctx.fillStyle = 'rgba(30, 40, 35, 0.7)';
+        ctx.fillRect(mx - 1.5, my - m.h * 0.5, 3, m.h * 0.5);
+        ctx.beginPath();
+        ctx.ellipse(mx, my - m.h * 0.5, m.w * 0.5, m.h * 0.4, 0, Math.PI, 0);
+        ctx.fillStyle = `hsla(${m.hue}, 60%, 30%, 0.6)`;
+        ctx.fill();
+        const mg = ctx.createRadialGradient(mx, my - m.h * 0.5, 0, mx, my - m.h * 0.5, m.w * 2);
+        mg.addColorStop(0, `hsla(${m.hue}, 90%, 60%, ${glow * 0.2})`);
+        mg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = mg;
+        ctx.beginPath();
+        ctx.arc(mx, my - m.h * 0.5, m.w * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
+/* â”€â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 export function ThemeLayer() {
   const settings = useSettingsStore(s => s.settings);
   const scheme = settings?.color_scheme ?? '';
@@ -1232,6 +2344,12 @@ export function ThemeLayer() {
   if (scheme === 'matrix')     return <MatrixLayer />;
   if (scheme === 'sakura')     return <SakuraLayer />;
   if (scheme === 'deep_sea')   return <DeepSeaLayer />;
-  if (scheme === 'black_hole') return <BlackHoleLayer />;
+  if (scheme === 'firefly')    return <FireflyLayer />;
+  if (scheme === 'cyberpunk')  return <CyberpunkLayer />;
+  if (scheme === 'snowfall')      return <SnowfallLayer />;
+  if (scheme === 'retrowave')     return <RetrowaveLayer />;
+  if (scheme === 'thunderstorm')  return <ThunderstormLayer />;
+  if (scheme === 'enchanted')     return <EnchantedLayer />;
+  if (scheme === 'custom_special') return <CustomSpecialLayer />;
   return null;
 }

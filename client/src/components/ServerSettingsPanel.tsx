@@ -6,6 +6,7 @@ import type { Channel, ServerSettings } from '../lib/types';
 interface ServerSettingsPanelProps {
   serverId: string;
   onClose: () => void;
+  onOpenRoleManager?: () => void;
 }
 
 type SettingsTab = 'overview' | 'moderation' | 'notifications' | 'community' | 'widget' | 'roles' | 'emoji' | 'audit_log' | 'bans' | 'invites' | 'safety';
@@ -38,7 +39,7 @@ const AFK_TIMEOUT_OPTIONS = [
   { value: 3600, label: '1 hour' },
 ];
 
-export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelProps) {
+export function ServerSettingsPanel({ serverId, onClose, onOpenRoleManager }: ServerSettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('overview');
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -144,7 +145,7 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar tabs */}
-          <div className="w-44 border-r border-white/10 p-2 space-y-1 shrink-0">
+          <div className="w-44 border-r border-white/10 p-2 space-y-1 shrink-0 overflow-y-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -251,6 +252,50 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
+                    </div>
+
+                    <div className="border-t border-white/10 pt-4">
+                      <h3 className="text-white font-semibold mb-1 flex items-center gap-2">
+                        <Sparkles size={16} /> Server Branding
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Customize your server's appearance with banner and splash images.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">Server Banner URL</label>
+                          <input
+                            type="text"
+                            value={settings.banner_url}
+                            onChange={(e) => updateSetting('banner_url', e.target.value)}
+                            placeholder="https://example.com/banner.png"
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+                          />
+                          {settings.banner_url && (
+                            <img src={settings.banner_url} alt="Banner preview" className="mt-2 rounded-lg max-h-24 object-cover w-full" />
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">Invite Splash URL</label>
+                          <input
+                            type="text"
+                            value={settings.splash_url}
+                            onChange={(e) => updateSetting('splash_url', e.target.value)}
+                            placeholder="https://example.com/splash.png"
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400 mb-1 block">Discovery Splash URL</label>
+                          <input
+                            type="text"
+                            value={settings.discovery_splash_url}
+                            onChange={(e) => updateSetting('discovery_splash_url', e.target.value)}
+                            placeholder="https://example.com/discovery.png"
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -399,6 +444,28 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                         />
                         Enable Community
                       </label>
+                      <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 text-sm text-white">
+                              Allow guests
+                              <span
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-[10px] text-gray-300"
+                                title="Let signed-out visitors or non-members view what a lowest-rank guest would normally be allowed to view."
+                              >
+                                ?
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">If enabled, guests can view the same server surfaces a guest-level member would normally be allowed to see.</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(settings.allow_guests)}
+                            onChange={(e) => updateSetting('allow_guests', e.target.checked)}
+                            className="mt-1 rounded bg-white/10 border-white/20"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {settings.community_enabled && (
@@ -524,12 +591,15 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                         <Shield size={16} /> Roles
                       </h3>
                       <p className="text-sm text-gray-400 mb-4">
-                        Use the Role Manager button in the channel sidebar to manage roles.
+                        Open the full role tools here or from the server sidebar.
                       </p>
                       <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
                         <p className="text-xs text-gray-500">
                           💡 The Role Manager provides full role creation, editing, permission assignment, and member role management. Look for the shield icon in the server sidebar.
                         </p>
+                        <button onClick={onOpenRoleManager} className="btn btn-primary mt-3 text-sm">
+                          <Shield size={14} /> Open Role Manager
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -626,6 +696,18 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                               <p className="text-sm text-white font-medium">{ban.user?.username || ban.username || ban.user_id || 'Unknown User'}</p>
                               {ban.reason && <p className="text-xs text-gray-500">Reason: {ban.reason}</p>}
                             </div>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await serversApi.unban(serverId, ban.user_id || ban.user?.id);
+                                  setBans(bans.filter((_, idx) => idx !== i));
+                                } catch {}
+                              }}
+                              className="px-2 py-1 text-xs bg-white/5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 rounded transition-colors"
+                              title="Unban"
+                            >
+                              Unban
+                            </button>
                             <p className="text-xs text-gray-600">
                               {ban.created_at ? new Date(ban.created_at).toLocaleDateString() : ''}
                             </p>
@@ -710,7 +792,11 @@ export function ServerSettingsPanel({ serverId, onClose }: ServerSettingsPanelPr
                           <p className="text-sm text-white">Slowmode</p>
                           <p className="text-xs text-gray-500">Rate-limit messages per channel</p>
                         </div>
-                        <select className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-sm text-white">
+                        <select 
+                          className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-sm text-white"
+                          value={settings.default_slowmode ?? 0}
+                          onChange={(e) => updateSetting('default_slowmode', parseInt(e.target.value))}
+                        >
                           <option value="0">Off</option>
                           <option value="5">5 seconds</option>
                           <option value="10">10 seconds</option>

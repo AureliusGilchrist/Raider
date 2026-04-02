@@ -208,21 +208,28 @@ export function AuthPage() {
               <div className="flex items-center gap-2 mb-2">
                 <Key size={14} className="text-purple-400" />
                 <label className="text-sm text-gray-200">
-                  Key Iterations: <span className="text-purple-300 font-bold">{keyIterations}</span>
+                  Tuning fidelity
                 </label>
               </div>
-              <input
-                type="range"
-                min={128}
-                max={8192}
-                step={128}
-                value={keyIterations}
-                onChange={(e) => setKeyIterations(Number(e.target.value))}
-                className="w-full accent-indigo-500"
-              />
-              <div className="flex justify-between text-xs text-gray-400 mt-1">
-                <span>128 (faster)</span>
-                <span>8192 (more secure)</span>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Less', value: 128 },
+                  { label: 'Medium', value: 2048 },
+                  { label: 'More', value: 8192 },
+                ].map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => setKeyIterations(option.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm transition-all-custom ${
+                      keyIterations === option.value
+                        ? 'border-indigo-400 bg-indigo-500/20 text-white'
+                        : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}

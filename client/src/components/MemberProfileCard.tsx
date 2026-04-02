@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { Avatar } from './Avatar';
 import { StatusIndicator } from './StatusIndicator';
 import { users, servers as serversApi, stats as statsApi } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 import { X, Globe, Shield, MessageSquare, ExternalLink } from 'lucide-react';
 
 interface MemberProfileCardProps {
@@ -13,9 +14,13 @@ interface MemberProfileCardProps {
 
 export function MemberProfileCard({ memberId, serverId, onClose }: MemberProfileCardProps) {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [profile, setProfile] = useState<any>(null);
   const [roles, setRoles] = useState<any[]>([]);
+  const [allRoles, setAllRoles] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,12 +28,33 @@ export function MemberProfileCard({ memberId, serverId, onClose }: MemberProfile
       users.profile(memberId).catch(() => null),
       serversApi.memberRoles(serverId, memberId).catch(() => []),
       statsApi.get(memberId).catch(() => null),
-    ]).then(([p, r, s]) => {
+      serversApi.roles(serverId).catch(() => []),
+      serversApi.get(serverId).catch(() => null),
+    ]).then(([p, r, s, allServerRoles, server]) => {
       setProfile(p);
       setRoles(r || []);
       setUserStats(s);
+      setAllRoles(allServerRoles || []);
+      setIsOwner(Boolean(server?.owner_id && server.owner_id === user?.id));
     }).finally(() => setLoading(false));
-  }, [memberId, serverId]);
+  }, [memberId, serverId, user?.id]);
+
+  const refreshRoles = async () => {
+    const updatedRoles = await serversApi.memberRoles(serverId, memberId).catch(() => []);
+    setRoles(updatedRoles || []);
+  };
+
+  const handleAssignRole = async () => {
+    if (!selectedRoleId) return;
+    await serversApi.assignRole(serverId, memberId, selectedRoleId).catch(() => {});
+    setSelectedRoleId('');
+    refreshRoles();
+  };
+
+  const handleRemoveRole = async (roleId: string) => {
+    await serversApi.removeRole(serverId, memberId, roleId).catch(() => {});
+    refreshRoles();
+  };
 
   if (loading) {
     return (
@@ -106,9 +132,11 @@ export function MemberProfileCard({ memberId, serverId, onClose }: MemberProfile
               </h4>
               <div className="flex flex-wrap gap-1">
                 {roles.map((role: any) => (
-                  <span
+                  <button
                     key={role.id}
+                    onClick={() => isOwner && handleRemoveRole(role.id)}
                     className="text-[10px] px-2 py-0.5 rounded-full border"
+                    title={isOwner ? 'Remove role' : undefined}
                     style={{
                       borderColor: role.color || '#99AAB5',
                       color: role.color || '#99AAB5',
@@ -116,9 +144,27 @@ export function MemberProfileCard({ memberId, serverId, onClose }: MemberProfile
                     }}
                   >
                     {role.name}
-                  </span>
+                  </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {isOwner && (
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+              <h4 className="text-[10px] font-semibold text-gray-500 uppercase flex items-center gap-1 mb-2">
+                <Shield size={10} /> Owner role controls
+              </h4>
+              <div className="flex gap-2">
+                <select value={selectedRoleId} onChange={(e) => setSelectedRoleId(e.target.value)} className="flex-1 text-xs">
+                  <option value="">Choose role…</option>
+                  {allRoles.filter((role: any) => !roles.some((ownedRole: any) => ownedRole.id === role.id)).map((role: any) => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+                <button onClick={handleAssignRole} className="btn btn-primary !px-3 !py-2 text-xs">Add</button>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-2">As owner, you can click an existing role chip to remove it or use the selector to add one.</p>
             </div>
           )}
 

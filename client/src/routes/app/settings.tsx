@@ -3,16 +3,16 @@ import { useParams, useNavigate } from '@tanstack/react-router';
 import { GlassPanel } from '../../components/GlassPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
-import { auth as authApi, twofa as twofaApi } from '../../lib/api';
+import { auth as authApi, twofa as twofaApi, uploads } from '../../lib/api';
 import type { UserSettings } from '../../lib/types';
-import { GENDER_OPTIONS_BASIC, GENDER_OPTIONS_ADVANCED, PRONOUN_OPTIONS, LANGUAGE_OPTIONS } from '../../lib/types';
+import { LANGUAGE_OPTIONS } from '../../lib/types';
 import {
-  User, Shield, Palette, Bell, Eye, Monitor, Save, X, Headphones,
+  User, Shield, Palette, Bell, Eye, Monitor, Save, X, Headphones, Settings2, Download, Share2,
 } from 'lucide-react';
 
 function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
   return (
-    <div className="flex items-start justify-between py-2.5 gap-4">
+    <div className="flex items-start justify-between py-3.5 gap-4">
       <div className="flex-1 min-w-0">
         <span className="text-sm text-gray-300 block">{label}</span>
         {description && <span className="text-xs text-gray-500 mt-0.5 block">{description}</span>}
@@ -30,24 +30,71 @@ function Toggle({ checked, onChange, label, description }: { checked: boolean; o
   );
 }
 
-const BASIC_SCHEMES = [
-  { id: 'default',  name: 'Default',  colors: ['#0d0c2e', '#1a0e45', '#130530'] },
-  { id: 'sunset',   name: 'Sunset',   colors: ['#1c0500', '#280800', '#1a0400'] },
-  { id: 'midnight', name: 'Midnight', colors: ['#050418', '#080730', '#06051f'] },
-  { id: 'neon',     name: 'Neon',     colors: ['#010a04', '#001a08', '#000d10'] },
+const DARK_BASIC_SCHEMES = [
+  { id: 'default',  name: 'Void Indigo',  colors: ['#0d0c2e', '#1a0e45', '#130530'] },
+  { id: 'sunset',   name: 'Ember Dusk',   colors: ['#1c0500', '#280800', '#1a0400'] },
+  { id: 'midnight', name: 'Abyssal Night', colors: ['#050418', '#080730', '#06051f'] },
+  { id: 'neon',     name: 'Toxic Glow',     colors: ['#010a04', '#001a08', '#000d10'] },
 ] as const;
 
-const SPECIAL_SCHEMES = [
+const DARK_SPECIAL_SCHEMES = [
   { id: 'space',      name: '🚀 Space',      colors: ['#0b0d21', '#1a0a2e', '#0d1b3e'] },
   { id: 'ocean',      name: '🌊 Ocean',      colors: ['#0a192f', '#006994', '#004d7a'] },
   { id: 'deep_sea',   name: '🦑 Deep Sea',   colors: ['#010a14', '#002040', '#003060'] },
   { id: 'aurora',     name: '🌌 Aurora',     colors: ['#0a0a1a', '#00ff80', '#00c8ff'] },
   { id: 'matrix',     name: '💻 Matrix',     colors: ['#0a0a0a', '#005000', '#00ff00'] },
   { id: 'sakura',     name: '🌸 Sakura',     colors: ['#1a0f1f', '#ffb6c1', '#ff69b4'] },
-  { id: 'black_hole', name: '🕳️ Black Hole', colors: ['#000000', '#0a0005', '#050010'] },
+  { id: 'firefly',    name: '🪲 Firefly',    colors: ['#0a0f08', '#1a2510', '#0d1a08'] },
+  { id: 'cyberpunk',  name: '🌆 Cyberpunk',  colors: ['#0a0012', '#1a0030', '#050018'] },
+  { id: 'snowfall',   name: '❄️ Snowfall',   colors: ['#0e1525', '#1a2540', '#151e35'] },
+  { id: 'retrowave',  name: '🌇 Retrowave',  colors: ['#0a0020', '#200040', '#0f0028'] },
+  { id: 'thunderstorm', name: '⛈️ Thunderstorm', colors: ['#06080f', '#0c1020', '#0a0e1a'] },
+  { id: 'enchanted',    name: '🔮 Enchanted',    colors: ['#060214', '#0a0520', '#04100c'] },
+  { id: 'custom_special', name: '🎞️ Custom Special', colors: ['#10131f', '#18233d', '#111726'] },
 ] as const;
 
-const COLOR_SCHEMES = [...BASIC_SCHEMES, ...SPECIAL_SCHEMES];
+const LIGHT_BASIC_SCHEMES = [
+  { id: 'light_lavender', name: 'Lavender Mist', colors: ['#d0cff5', '#e8d5f5', '#f0d5eb'] },
+  { id: 'light_peach', name: 'Peach Cream', colors: ['#fde8d0', '#fad5c0', '#f5c8b0'] },
+  { id: 'light_mint', name: 'Mint Frost', colors: ['#c8f0e0', '#d0ece5', '#b8e8d8'] },
+  { id: 'light_sky', name: 'Sky Wash', colors: ['#c5ddf0', '#d0e4f8', '#c0d8f5'] },
+] as const;
+
+const LIGHT_SPECIAL_SCHEMES = [
+  { id: 'light_sunrise', name: '🌅 Sunrise', colors: ['#fff5e0', '#ffe0c0', '#ffd0a0'] },
+  { id: 'light_garden', name: '🌿 Garden', colors: ['#e8f5e0', '#d0ecc0', '#c0e8a8'] },
+  { id: 'light_cloud', name: '☁️ Cloud', colors: ['#eef0f8', '#e0e4f0', '#d5daea'] },
+  { id: 'light_blossom', name: '🌺 Blossom', colors: ['#fce8f0', '#f8d0e0', '#f0c0d5'] },
+  { id: 'light_ocean', name: '🏖️ Coast', colors: ['#e0f4f8', '#c8ecf5', '#b0e0f0'] },
+  { id: 'light_honey', name: '🍯 Honey', colors: ['#fdf0d0', '#fae8b8', '#f5e0a0'] },
+] as const;
+
+const BASIC_SCHEMES = DARK_BASIC_SCHEMES;
+const SPECIAL_SCHEMES = DARK_SPECIAL_SCHEMES;
+
+const COLOR_SCHEMES = [...DARK_BASIC_SCHEMES, ...DARK_SPECIAL_SCHEMES, ...LIGHT_BASIC_SCHEMES, ...LIGHT_SPECIAL_SCHEMES];
+
+type CustomThemeConfig = {
+  backgroundUrl: string;
+  backgroundType: 'image' | 'video';
+  overlay: number;
+  textColors: [string, string, string, string];
+};
+
+const DEFAULT_CUSTOM_THEME: CustomThemeConfig = {
+  backgroundUrl: '',
+  backgroundType: 'image',
+  overlay: 0.26,
+  textColors: ['#f6f7ff', '#dcdff3', '#acb3d7', '#7985ad'],
+};
+
+function readCustomThemeConfig(): CustomThemeConfig {
+  try {
+    return { ...DEFAULT_CUSTOM_THEME, ...(JSON.parse(localStorage.getItem('raider_custom_theme') || '{}')) };
+  } catch {
+    return DEFAULT_CUSTOM_THEME;
+  }
+}
 
 function AudioSettings() {
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -223,9 +270,11 @@ export function SettingsPage() {
   const tab = urlTab ?? 'profile';
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [bio, setBio] = useState('');
   const [gender, setGender] = useState('');
-  const [genderCustom, setGenderCustom] = useState('');
+  const [sexuality, setSexuality] = useState('');
   const [pronouns, setPronouns] = useState('');
   const [advancedMode, setAdvancedMode] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -235,6 +284,29 @@ export function SettingsPage() {
   const [twoFADisableCode, setTwoFADisableCode] = useState('');
   const [twoFAError, setTwoFAError] = useState('');
   const [lightMode, setLightMode] = useState(() => localStorage.getItem('raider_light_mode') === 'true');
+  const [themeTools, setThemeTools] = useState<'custom_special' | null>(null);
+  const [customTheme, setCustomTheme] = useState<CustomThemeConfig>(() => readCustomThemeConfig());
+  const [chatbarEffect, setChatbarEffect] = useState(() => localStorage.getItem('raider_chatbar_effect') || 'none');
+
+  // Creative appearance options
+  const [messageDensity, setMessageDensity] = useState(() => localStorage.getItem('raider_msg_density') || 'default');
+  const [chatBubbleStyle, setChatBubbleStyle] = useState(() => localStorage.getItem('raider_bubble_style') || 'flat');
+  const [uiRoundness, setUiRoundness] = useState(() => localStorage.getItem('raider_ui_roundness') || 'default');
+  const [avatarShape, setAvatarShape] = useState(() => localStorage.getItem('raider_avatar_shape') || 'circle');
+  const [scrollbarStyle, setScrollbarStyle] = useState(() => localStorage.getItem('raider_scrollbar') || 'default');
+  const [panelOpacity, setPanelOpacity] = useState(() => Number(localStorage.getItem('raider_panel_opacity') || '15'));
+  const [textGlow, setTextGlow] = useState(() => localStorage.getItem('raider_text_glow') || 'none');
+  const [hoverEffect, setHoverEffect] = useState(() => localStorage.getItem('raider_hover_effect') || 'none');
+  const [nameHighlight, setNameHighlight] = useState(() => localStorage.getItem('raider_name_highlight') || 'none');
+  const [buttonStyle, setButtonStyle] = useState(() => localStorage.getItem('raider_button_style') || 'default');
+  const [notifBadge, setNotifBadge] = useState(() => localStorage.getItem('raider_notif_badge') || 'count');
+  const [timestampDisplay, setTimestampDisplay] = useState(() => localStorage.getItem('raider_timestamp') || 'full');
+  const [glassBlur, setGlassBlur] = useState(() => Number(localStorage.getItem('raider_glass_blur') || '35'));
+  const [sidebarWidth, setSidebarWidth] = useState(() => localStorage.getItem('raider_sidebar_width') || 'default');
+  const [chatWidth, setChatWidth] = useState(() => localStorage.getItem('raider_chat_width') || 'default');
+  const [cursorStyle, setCursorStyle] = useState(() => localStorage.getItem('raider_cursor_style') || 'default');
+  const [sendBtnStyle, setSendBtnStyle] = useState(() => localStorage.getItem('raider_send_btn') || 'default');
+  const [dividerStyle, setDividerStyle] = useState(() => localStorage.getItem('raider_divider_style') || 'default');
 
   const toggleLightMode = (v: boolean) => {
     setLightMode(v);
@@ -247,14 +319,71 @@ export function SettingsPage() {
     document.body.classList.toggle('light-mode', lightMode);
   }, []);
 
+  // Apply creative appearance options to DOM
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+
+    // Roundness
+    const roundMap: Record<string, string> = { sharp: '0px', soft: '6px', default: '12px', round: '20px', pill: '999px' };
+    root.style.setProperty('--ui-roundness', roundMap[uiRoundness] || '12px');
+
+    // Panel opacity
+    root.style.setProperty('--panel-opacity', String(panelOpacity / 100));
+
+    // Glass blur
+    root.style.setProperty('--glass-blur', `${glassBlur}px`);
+
+    // Message density
+    const densityMap: Record<string, string> = { compact: '2px', default: '8px', cozy: '14px' };
+    root.style.setProperty('--msg-density', densityMap[messageDensity] || '8px');
+
+    // Sidebar width
+    const sidebarMap: Record<string, string> = { narrow: '220px', default: '280px', wide: '340px' };
+    root.style.setProperty('--sidebar-width', sidebarMap[sidebarWidth] || '280px');
+
+    // Chat width
+    const chatMap: Record<string, string> = { narrow: '640px', default: '860px', wide: '1100px', full: '100%' };
+    root.style.setProperty('--chat-width', chatMap[chatWidth] || '860px');
+
+    // Apply class-based styles
+    const classMap: Record<string, [string, string]> = {
+      bubble: ['raider-bubble-', chatBubbleStyle],
+      avatar: ['raider-avatar-', avatarShape],
+      scrollbar: ['raider-scrollbar-', scrollbarStyle],
+      glow: ['raider-glow-', textGlow],
+      hover: ['raider-hover-', hoverEffect],
+      name: ['raider-name-', nameHighlight],
+      btn: ['raider-btn-', buttonStyle],
+      badge: ['raider-badge-', notifBadge],
+      timestamp: ['raider-ts-', timestampDisplay],
+      density: ['raider-density-', messageDensity],
+      cursor: ['raider-cursor-', cursorStyle],
+      send: ['raider-send-', sendBtnStyle],
+      divider: ['raider-divider-', dividerStyle],
+    };
+
+    for (const [prefix, [cls, val]] of Object.entries(classMap)) {
+      body.className = body.className.replace(new RegExp(`raider-${prefix}-\\S+`, 'g'), '').trim();
+      if (val !== 'default' && val !== 'none' && val !== 'flat' && val !== 'circle' && val !== 'count' && val !== 'full') {
+        body.classList.add(`${cls}${val}`);
+      }
+    }
+  }, [uiRoundness, panelOpacity, glassBlur, messageDensity, sidebarWidth, chatWidth,
+      chatBubbleStyle, avatarShape, scrollbarStyle, textGlow, hoverEffect, nameHighlight,
+      buttonStyle, notifBadge, timestampDisplay, cursorStyle, sendBtnStyle, dividerStyle]);
+
   useEffect(() => { fetchSettings(); }, []);
 
+  const formLoadedRef = useRef(false);
   useEffect(() => {
-    if (user) {
+    if (user && !formLoadedRef.current) {
+      formLoadedRef.current = true;
       setDisplayName(user.display_name || '');
+      setUsername(user.username || '');
       setBio(user.bio || '');
       setGender(user.gender || '');
-      setGenderCustom(user.gender_custom || '');
+      setSexuality(user.sexuality || '');
       setPronouns(user.pronouns || '');
       setAdvancedMode(user.advanced_mode || false);
       try { setLanguages(JSON.parse(user.languages || '[]')); } catch { setLanguages([]); }
@@ -263,15 +392,54 @@ export function SettingsPage() {
 
   const saveProfile = async () => {
     setSaving(true);
+    setUsernameError('');
     try {
-      const updated = await authApi.updateProfile({
-        display_name: displayName, bio, gender,
-        gender_custom: genderCustom, pronouns, advanced_mode: advancedMode,
+      const payload: Record<string, any> = {
+        display_name: displayName, bio, gender, username,
+        gender_custom: '', sexuality, pronouns, advanced_mode: advancedMode,
         languages: JSON.stringify(languages),
-      });
+      };
+      const updated = await authApi.updateProfile(payload);
       setUser(updated);
-    } catch {}
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.includes('taken')) setUsernameError('Username is already taken');
+      else if (msg.includes('Username')) setUsernameError(msg);
+    }
     setSaving(false);
+  };
+
+  const refreshThemeDOM = () => {
+    const current = useSettingsStore.getState().settings;
+    if (current) useSettingsStore.getState().applyToDOM(current);
+  };
+
+  const saveCustomTheme = () => {
+    localStorage.setItem('raider_custom_theme', JSON.stringify(customTheme));
+    window.dispatchEvent(new Event('raider-custom-theme-updated'));
+    refreshThemeDOM();
+    setThemeTools(null);
+  };
+
+  const exportCustomTheme = () => {
+    const blob = new Blob([JSON.stringify(customTheme, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'raider-custom-theme.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const shareCustomTheme = () => {
+    const current = JSON.parse(localStorage.getItem('raider_theme_shop_customs') || '[]');
+    current.unshift({
+      id: String(Date.now()),
+      name: `${user?.display_name || user?.username || 'Custom'} Theme`,
+      config: customTheme,
+    });
+    localStorage.setItem('raider_theme_shop_customs', JSON.stringify(current.slice(0, 24)));
+    window.dispatchEvent(new Event('raider-theme-shop-updated'));
   };
 
   const tabs = [
@@ -283,31 +451,26 @@ export function SettingsPage() {
     { id: 'security', label: 'Security', icon: <Shield size={16} /> },
     { id: 'advanced', label: 'Advanced', icon: <Monitor size={16} /> },
   ];
-
-  const genderOptions = advancedMode ? GENDER_OPTIONS_ADVANCED : GENDER_OPTIONS_BASIC;
-
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
-
-      <div className="flex gap-6">
-        <div className="w-48 shrink-0">
-          <div className="flex flex-col gap-1">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => navigate({ to: '/app/settings/$tab', params: { tab: t.id } })}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all-custom ${
-                  tab === t.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {t.icon} {t.label}
-              </button>
-            ))}
-          </div>
+    <div className="flex h-full">
+      <div className="w-56 shrink-0 glass border-r border-white/10 flex flex-col">
+        <h1 className="text-xl font-bold text-white px-5 pt-6 pb-4">Settings</h1>
+        <div className="flex flex-col gap-1 px-3">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => navigate({ to: '/app/settings/$tab', params: { tab: t.id } })}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-all-custom ${
+                tab === t.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <span className={tab === t.id ? 'settings-tab-icon-active' : 'settings-tab-icon'}>{t.icon}</span> {t.label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="flex-1">
+      <div className="flex-1 overflow-y-auto p-8">
           {/* Profile Tab */}
           {tab === 'profile' && (
             <GlassPanel className="p-6 animate-fade-in">
@@ -318,33 +481,52 @@ export function SettingsPage() {
                   <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full" />
                 </div>
                 <div>
+                  <label className="text-sm text-gray-400 mb-1 block">@ Handle</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => { setUsername(e.target.value.replace(/[^a-zA-Z0-9_.]/g, '')); setUsernameError(''); }}
+                      className="w-full !pl-7"
+                      maxLength={30}
+                    />
+                  </div>
+                  {usernameError && <p className="text-xs text-red-400 mt-1">{usernameError}</p>}
+                </div>
+                <div>
                   <label className="text-sm text-gray-400 mb-1 block">Bio</label>
                   <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} className="w-full" />
                 </div>
-                <Toggle checked={advancedMode} onChange={setAdvancedMode} label="Advanced gender options (LGBTQIA+)" />
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">Gender</label>
-                  <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full">
-                    <option value="">Select...</option>
-                    {genderOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Custom gender description</label>
                   <input
                     type="text"
-                    placeholder="Describe your gender freely…"
-                    value={genderCustom}
-                    onChange={(e) => setGenderCustom(e.target.value)}
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full"
+                    placeholder="Describe your gender however you want"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Sexuality</label>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={sexuality}
+                    onChange={(e) => setSexuality(e.target.value)}
                     className="w-full"
                   />
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">Pronouns</label>
-                  <select value={pronouns} onChange={(e) => setPronouns(e.target.value)} className="w-full">
-                    <option value="">Select...</option>
-                    {PRONOUN_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <input
+                    type="text"
+                    value={pronouns}
+                    onChange={(e) => setPronouns(e.target.value)}
+                    placeholder="e.g. he/him, she/her, they/them"
+                    className="w-full"
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 mb-1 block">Languages</label>
@@ -463,15 +645,29 @@ export function SettingsPage() {
                   <option value="large">Large</option>
                 </select>
               </div>
+              <div className="mt-3">
+                <label className="text-sm text-gray-400 mb-1 block">Chat Bar Effect</label>
+                <select value={chatbarEffect} onChange={(e) => {
+                  setChatbarEffect(e.target.value);
+                  localStorage.setItem('raider_chatbar_effect', e.target.value);
+                }} className="w-full">
+                  <option value="none">None</option>
+                  <option value="shine">✨ Shine</option>
+                  <option value="glow">💜 Glow</option>
+                  <option value="pulse">💫 Pulse</option>
+                  <option value="rainbow">🌈 Rainbow</option>
+                  <option value="border-glow">🔮 Border Glow</option>
+                </select>
+              </div>
               <Toggle checked={settings.reduced_motion} onChange={(v) => update({ reduced_motion: v })} label="Reduced motion" />
               <Toggle checked={settings.high_contrast} onChange={(v) => update({ high_contrast: v })} label="High contrast" />
               <div className="mt-4">
                 <label className="text-sm text-gray-400 mb-2 block">Color Scheme</label>
 
                 {/* Basic presets */}
-                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">Basic</p>
+                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">{lightMode ? '☀️ Light Basic' : '🌑 Dark Basic'}</p>
                 <div className="grid grid-cols-4 gap-2 mb-4">
-                  {BASIC_SCHEMES.map((scheme) => (
+                  {(lightMode ? LIGHT_BASIC_SCHEMES : DARK_BASIC_SCHEMES).map((scheme) => (
                     <button
                       key={scheme.id}
                       onClick={() => {
@@ -488,44 +684,130 @@ export function SettingsPage() {
                       }`}
                       title={scheme.name}
                     >
-                      <div className="flex gap-0.5">
-                        {scheme.colors.map((c, i) => (
-                          <div key={i} className="w-4 h-4 rounded-full" style={{ backgroundColor: c }} />
-                        ))}
+                      <div className="w-full h-8 rounded-lg overflow-hidden" style={{ background: `linear-gradient(135deg, ${scheme.colors[0]}, ${scheme.colors[1]}, ${scheme.colors[2]})` }}>
+                        <div className="w-full h-full flex items-end justify-center" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)' }}>
+                          <div className="flex gap-1 mb-1">
+                            {scheme.colors.map((c, i) => (
+                              <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/30" style={{ backgroundColor: c }} />
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-[10px] text-gray-400 truncate w-full text-center">{scheme.name}</span>
+                      <span className="text-[10px] text-gray-400 truncate w-full text-center mt-1">{scheme.name}</span>
                     </button>
                   ))}
                 </div>
 
                 {/* Animated special themes */}
-                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">✨ Special</p>
+                <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-1.5">{lightMode ? '☀️ Light Special' : '✨ Dark Special'}</p>
                 <div className="grid grid-cols-4 gap-2">
-                  {SPECIAL_SCHEMES.map((scheme) => (
-                    <button
-                      key={scheme.id}
-                      onClick={() => {
-                        update({
-                          color_scheme: scheme.id,
-                          gradient_color1: scheme.colors[0],
-                          gradient_color2: scheme.colors[1],
-                          gradient_color3: scheme.colors[2],
-                          accent_color: scheme.colors[0],
+                  {(lightMode ? LIGHT_SPECIAL_SCHEMES : DARK_SPECIAL_SCHEMES).map((scheme) => (
+                    <div key={scheme.id} className={`rounded-lg transition-all-custom ${settings.color_scheme === scheme.id ? 'bg-white/20 ring-2 ring-white/40' : 'hover:bg-white/10'}`}>
+                      <button
+                        onClick={() => {
+                          update({
+                            color_scheme: scheme.id,
+                            gradient_color1: scheme.colors[0],
+                            gradient_color2: scheme.colors[1],
+                            gradient_color3: scheme.colors[2],
+                            accent_color: scheme.colors[0],
+                          });
+                        }}
+                        className="flex w-full flex-col items-center gap-1 p-2"
+                        title={scheme.name}
+                      >
+                        <div className="w-full h-8 rounded-lg overflow-hidden" style={{ background: `linear-gradient(135deg, ${scheme.colors[0]}, ${scheme.colors[1]}, ${scheme.colors[2]})` }}>
+                          <div className="w-full h-full flex items-end justify-center" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)' }}>
+                            <div className="flex gap-1 mb-1">
+                              {scheme.colors.map((c, i) => (
+                                <div key={i} className="w-2.5 h-2.5 rounded-full border border-white/30" style={{ backgroundColor: c }} />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-gray-400 truncate w-full text-center mt-1">{scheme.name}</span>
+                      </button>
+                      {scheme.id === 'custom_special' && (
+                        <button
+                          onClick={() => setThemeTools('custom_special')}
+                          className="mx-auto mb-2 flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-gray-300 hover:bg-white/10"
+                        >
+                          <Settings2 size={11} /> Configure
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </GlassPanel>
+          )}
+
+          {themeTools === 'custom_special' && (
+            <GlassPanel className="p-6 animate-fade-in mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-semibold">Custom Special Theme</h3>
+                <button onClick={() => setThemeTools(null)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+              </div>
+              <div className="space-y-4">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="text-sm text-gray-400 mb-1 block">Background URL</label>
+                    <input value={customTheme.backgroundUrl} onChange={(e) => setCustomTheme({ ...customTheme, backgroundUrl: e.target.value })} className="w-full" placeholder="Image or video URL" />
+                  </div>
+                  <label className="btn btn-glass cursor-pointer">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const uploaded = await uploads.upload(file);
+                        setCustomTheme({
+                          ...customTheme,
+                          backgroundUrl: uploaded.url,
+                          backgroundType: file.type.startsWith('video/') ? 'video' : 'image',
                         });
                       }}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all-custom ${
-                        settings.color_scheme === scheme.id ? 'bg-white/20 ring-2 ring-white/40' : 'hover:bg-white/10'
-                      }`}
-                      title={scheme.name}
-                    >
-                      <div className="flex gap-0.5">
-                        {scheme.colors.map((c, i) => (
-                          <div key={i} className="w-4 h-4 rounded-full" style={{ backgroundColor: c }} />
-                        ))}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Background type</label>
+                  <select value={customTheme.backgroundType} onChange={(e) => setCustomTheme({ ...customTheme, backgroundType: e.target.value as 'image' | 'video' })}>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-1 block">Overlay strength</label>
+                  <input type="range" min={0} max={0.7} step={0.01} value={customTheme.overlay} onChange={(e) => setCustomTheme({ ...customTheme, overlay: Number(e.target.value) })} className="w-full accent-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 mb-2 block">Text colors</label>
+                  <div className="flex gap-3">
+                    {customTheme.textColors.map((color, index) => (
+                      <div key={index}>
+                        <label className="text-xs text-gray-500 block mb-1">Text {index + 1}</label>
+                        <input
+                          type="color"
+                          value={color}
+                          onChange={(e) => {
+                            const next = [...customTheme.textColors] as CustomThemeConfig['textColors'];
+                            next[index] = e.target.value;
+                            setCustomTheme({ ...customTheme, textColors: next });
+                          }}
+                          className="w-10 h-10 rounded cursor-pointer"
+                        />
                       </div>
-                      <span className="text-[10px] text-gray-400 truncate w-full text-center">{scheme.name}</span>
-                    </button>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={saveCustomTheme} className="btn btn-primary"><Save size={14} /> Save</button>
+                  <button onClick={exportCustomTheme} className="btn btn-glass"><Download size={14} /> Export</button>
+                  <button onClick={shareCustomTheme} className="btn btn-glass"><Share2 size={14} /> Share to shop</button>
                 </div>
               </div>
             </GlassPanel>
@@ -721,7 +1003,6 @@ export function SettingsPage() {
               </div>
             </GlassPanel>
           )}
-        </div>
       </div>
     </div>
   );

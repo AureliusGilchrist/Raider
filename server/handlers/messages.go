@@ -27,9 +27,9 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgID := generateID()
-	_, err := db.DB.Exec(`INSERT INTO messages (id, channel_id, sender_id, recipient_id, server_id, content, encrypted, nonce)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		msgID, req.ChannelID, userID, req.RecipientID, req.ServerID, req.Content, req.Encrypted, req.Nonce)
+	_, err := db.DB.Exec(`INSERT INTO messages (id, channel_id, sender_id, recipient_id, server_id, content, encrypted, nonce, reply_to_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		msgID, req.ChannelID, userID, req.RecipientID, req.ServerID, req.Content, req.Encrypted, req.Nonce, req.ReplyToID)
 	if err != nil {
 		jsonError(w, "Failed to send message", http.StatusInternalServerError)
 		return
@@ -43,6 +43,7 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 	var senderName, senderAvatar string
 	db.DB.QueryRow("SELECT username, avatar_url FROM users WHERE id = ?", userID).Scan(&senderName, &senderAvatar)
 
+	now := time.Now()
 	msg := models.Message{
 		ID:           msgID,
 		ChannelID:    req.ChannelID,
@@ -52,8 +53,19 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		Content:      req.Content,
 		Encrypted:    req.Encrypted,
 		Nonce:        req.Nonce,
+		CreatedAt:    now,
 		SenderName:   senderName,
 		SenderAvatar: senderAvatar,
+		ReplyToID:    req.ReplyToID,
+	}
+
+	// Fetch reply-to snippet if replying
+	if req.ReplyToID != nil && *req.ReplyToID != "" {
+		var rID, rSender, rContent string
+		err := db.DB.QueryRow(`SELECT m.id, u.username, m.content FROM messages m JOIN users u ON m.sender_id = u.id WHERE m.id = ?`, *req.ReplyToID).Scan(&rID, &rSender, &rContent)
+		if err == nil {
+			msg.ReplyTo = &models.MessageReplyTo{ID: rID, SenderName: rSender, Content: rContent}
+		}
 	}
 
 	// Broadcast via WebSocket
@@ -77,8 +89,11 @@ func GetChannelMessages(w http.ResponseWriter, r *http.Request) {
 	channelID := chi.URLParam(r, "channelID")
 
 	rows, err := db.DB.Query(`SELECT m.id, m.channel_id, m.sender_id, m.recipient_id, m.server_id, m.content, m.encrypted, m.nonce, m.created_at,
-		u.username, u.avatar_url
+		u.username, u.avatar_url, m.reply_to_id,
+		rm.id, ru.username, rm.content
 		FROM messages m JOIN users u ON m.sender_id = u.id
+		LEFT JOIN messages rm ON m.reply_to_id = rm.id
+		LEFT JOIN users ru ON rm.sender_id = ru.id
 		WHERE m.channel_id = ?
 		ORDER BY m.created_at ASC LIMIT 100`, channelID)
 	if err != nil {
@@ -90,8 +105,14 @@ func GetChannelMessages(w http.ResponseWriter, r *http.Request) {
 	messages := []models.Message{}
 	for rows.Next() {
 		var m models.Message
+		var replyToID, replyID, replySender, replyContent *string
 		rows.Scan(&m.ID, &m.ChannelID, &m.SenderID, &m.RecipientID, &m.ServerID, &m.Content, &m.Encrypted, &m.Nonce, &m.CreatedAt,
-			&m.SenderName, &m.SenderAvatar)
+			&m.SenderName, &m.SenderAvatar, &replyToID,
+			&replyID, &replySender, &replyContent)
+		m.ReplyToID = replyToID
+		if replyID != nil && replySender != nil && replyContent != nil {
+			m.ReplyTo = &models.MessageReplyTo{ID: *replyID, SenderName: *replySender, Content: *replyContent}
+		}
 		messages = append(messages, m)
 	}
 

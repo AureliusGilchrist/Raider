@@ -28,13 +28,13 @@ func GetServerSettings(w http.ResponseWriter, r *http.Request) {
 		system_channel_flags, default_message_notifications, verification_level,
 		explicit_content_filter, mfa_level, widget_enabled, widget_channel_id,
 		community_enabled, rules_channel_id, public_updates_channel_id,
-		welcome_screen_enabled, welcome_screen_description, splash_url, banner_url, discovery_splash_url
+		welcome_screen_enabled, welcome_screen_description, splash_url, banner_url, discovery_splash_url, COALESCE(allow_guests, 0), COALESCE(default_slowmode, 0)
 		FROM server_settings WHERE server_id = ?`, serverID).Scan(
 		&s.ServerID, &s.AFKChannelID, &s.AFKTimeout, &s.SystemChannelID,
 		&s.SystemChannelFlags, &s.DefaultMessageNotifications, &s.VerificationLevel,
 		&s.ExplicitContentFilter, &s.MFALevel, &s.WidgetEnabled, &s.WidgetChannelID,
 		&s.CommunityEnabled, &s.RulesChannelID, &s.PublicUpdatesChannelID,
-		&s.WelcomeScreenEnabled, &s.WelcomeScreenDescription, &s.SplashURL, &s.BannerURL, &s.DiscoverySplashURL)
+		&s.WelcomeScreenEnabled, &s.WelcomeScreenDescription, &s.SplashURL, &s.BannerURL, &s.DiscoverySplashURL, &s.AllowGuests, &s.DefaultSlowmode)
 	if err != nil {
 		// Create default settings if not found
 		db.DB.Exec("INSERT OR IGNORE INTO server_settings (server_id) VALUES (?)", serverID)
@@ -90,25 +90,25 @@ func UpdateServerSettings(w http.ResponseWriter, r *http.Request) {
 		system_channel_flags, default_message_notifications, verification_level,
 		explicit_content_filter, mfa_level, widget_enabled, widget_channel_id,
 		community_enabled, rules_channel_id, public_updates_channel_id,
-		welcome_screen_enabled, welcome_screen_description, splash_url, banner_url, discovery_splash_url)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		welcome_screen_enabled, welcome_screen_description, splash_url, banner_url, discovery_splash_url, allow_guests, default_slowmode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(server_id) DO UPDATE SET
 		afk_channel_id=?, afk_timeout=?, system_channel_id=?,
 		system_channel_flags=?, default_message_notifications=?, verification_level=?,
 		explicit_content_filter=?, mfa_level=?, widget_enabled=?, widget_channel_id=?,
 		community_enabled=?, rules_channel_id=?, public_updates_channel_id=?,
-		welcome_screen_enabled=?, welcome_screen_description=?, splash_url=?, banner_url=?, discovery_splash_url=?`,
+		welcome_screen_enabled=?, welcome_screen_description=?, splash_url=?, banner_url=?, discovery_splash_url=?, allow_guests=?, default_slowmode=?`,
 		serverID, s.AFKChannelID, s.AFKTimeout, s.SystemChannelID,
 		s.SystemChannelFlags, s.DefaultMessageNotifications, s.VerificationLevel,
 		s.ExplicitContentFilter, s.MFALevel, s.WidgetEnabled, s.WidgetChannelID,
 		s.CommunityEnabled, s.RulesChannelID, s.PublicUpdatesChannelID,
-		s.WelcomeScreenEnabled, s.WelcomeScreenDescription, s.SplashURL, s.BannerURL, s.DiscoverySplashURL,
+		s.WelcomeScreenEnabled, s.WelcomeScreenDescription, s.SplashURL, s.BannerURL, s.DiscoverySplashURL, s.AllowGuests, s.DefaultSlowmode,
 		// ON CONFLICT update values
 		s.AFKChannelID, s.AFKTimeout, s.SystemChannelID,
 		s.SystemChannelFlags, s.DefaultMessageNotifications, s.VerificationLevel,
 		s.ExplicitContentFilter, s.MFALevel, s.WidgetEnabled, s.WidgetChannelID,
 		s.CommunityEnabled, s.RulesChannelID, s.PublicUpdatesChannelID,
-		s.WelcomeScreenEnabled, s.WelcomeScreenDescription, s.SplashURL, s.BannerURL, s.DiscoverySplashURL)
+		s.WelcomeScreenEnabled, s.WelcomeScreenDescription, s.SplashURL, s.BannerURL, s.DiscoverySplashURL, s.AllowGuests, s.DefaultSlowmode)
 	if err != nil {
 		jsonError(w, "Failed to update server settings", http.StatusInternalServerError)
 		return

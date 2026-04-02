@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Send, X, Plus, UserMinus, Trash2, MoreVertical } from 'lucide-react';
 import { groups as groupsApi } from '../lib/api';
+import { raiderConfirm } from './CustomPopup';
 import { useAuthStore } from '../stores/authStore';
 import { useWSStore } from '../stores/wsStore';
 import { Avatar } from './Avatar';
@@ -91,7 +92,7 @@ export function GroupChat({ groupId, onBack }: GroupChatProps) {
   };
 
   const handleLeave = async () => {
-    if (!confirm('Leave this group chat?')) return;
+    if (!(await raiderConfirm('Leave this group chat?'))) return;
     try {
       await groupsApi.leave(groupId);
       onBack?.();
@@ -101,7 +102,7 @@ export function GroupChat({ groupId, onBack }: GroupChatProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this group chat? This cannot be undone.')) return;
+    if (!(await raiderConfirm('Delete this group chat? This cannot be undone.'))) return;
     try {
       await groupsApi.delete(groupId);
       onBack?.();
@@ -111,7 +112,7 @@ export function GroupChat({ groupId, onBack }: GroupChatProps) {
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm('Remove this member?')) return;
+    if (!(await raiderConfirm('Remove this member?'))) return;
     try {
       await groupsApi.removeMember(groupId, userId);
       setMembers((prev) => prev.filter((m) => m.id !== userId));
@@ -237,7 +238,7 @@ export function GroupChat({ groupId, onBack }: GroupChatProps) {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-white/10">
+      <div className={`p-4 border-t border-white/10 ${(() => { const fx = localStorage.getItem('raider_chatbar_effect'); return fx && fx !== 'none' ? `chatbar-effect-${fx}` : ''; })()}`}>
         <div className="flex gap-2">
           <input
             type="text"
